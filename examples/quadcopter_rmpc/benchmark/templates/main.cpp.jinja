@@ -1,0 +1,256 @@
+#include <iostream>
+#include <fstream>
+#include <array>
+#include <string>
+
+#include <chrono>
+
+#include "neural_network.hpp"
+
+#include <Eigen/Dense>
+
+extern "C" {
+#include <acados/utils/print.h>
+#include <acados/utils/math.h>
+#include <acados_c/sim_interface.h>
+#include <acados_sim_solver_quadcopter.h>
+}
+
+static constexpr std::size_t NX{QUADCOPTER_NX};
+static constexpr std::size_t NZ{QUADCOPTER_NZ};
+static constexpr std::size_t NU{QUADCOPTER_NU};
+static constexpr std::size_t NP{QUADCOPTER_NP};
+static constexpr std::size_t N{10};
+static constexpr std::size_t Nsim{30};
+
+static const Eigen::Matrix<float, NX, NX>Q{{Q}};
+static const Eigen::Matrix<float, NX, NX>P{{P}};
+static const Eigen::Matrix<float, NU, NU>R{{R}};
+static const Eigen::Matrix<float, NU, NX>K{{K}};
+static const Eigen::Matrix<float, NU, NX>Kdelta{{Kdelta}};
+static const Eigen::Matrix<float, NU, NX>KmKdelta{K-Kdelta};
+static const float alpha{ {{alpha}} };
+static const float alphaSquared = alpha*alpha;
+//static const Eigen::Matrix<float, {{nconstr}} , NU> Lu{{Lu}};
+static const Eigen::Matrix<float, {{nconstr}} , NX> Lx{{Lx}};
+static const Eigen::Vector<float, NU> u_max{ {{u_max}} };
+static const Eigen::Vector<float, NU> u_min{ {{u_min}} };
+//static const Eigen::Vector<float, NX> x_max{ {{x_max}} };
+//static const Eigen::Vector<float, NX> x_min{ {{x_min}} };
+static const float eps{1e-4};
+
+namespace acados_sim {
+
+    int status = 0;
+    sim_solver_capsule *capsule;
+    sim_config *acados_sim_config;
+    sim_opts *acados_sim_opts;
+    sim_in *acados_sim_in;
+    sim_out *acados_sim_out;
+    void *acados_sim_dims;
+    
+    void acadosSimInit(){
+        capsule  = quadcopter_acados_sim_solver_create_capsule();
+        status = quadcopter_acados_sim_create(capsule);
+        if (status)
+        {
+            printf("acados_create() returned status %d. Exiting.\n", status);
+            exit(1);
+        }
+        acados_sim_config = quadcopter_acados_get_sim_config(capsule);
+        acados_sim_opts = quadcopter_acados_get_sim_opts(capsule);
+        // acados_sim_opts->newton_iter=2;
+        // acados_sim_opts->newton_tol=5e-2;
+        acados_sim_in = quadcopter_acados_get_sim_in(capsule);
+        acados_sim_out = quadcopter_acados_get_sim_out(capsule);
+        acados_sim_dims = quadcopter_acados_get_sim_dims(capsule);
+    };
+
+}; // namespace acados_sim
+
+// Eigen::Matrix<float, NX, N> 
+void
+forwardSimulateTrajectoryClippedInputs(Eigen::Matrix<float, NX, N+1>& X, Eigen::Matrix<float, NU, N>& U, Eigen::Matrix<float, NU, N>& V){
+    for (std::size_t ii=0; ii < N; ii++){
+        U.col(ii) = (Kdelta*X.col(ii)+V.col(ii)).cwiseMin(u_max).cwiseMax(u_min);
+        V.col(ii) = U.col(ii) - Kdelta*X.col(ii);
+        Eigen::Vector<double, NX> x_double = X.col(ii).cast<double>();
+        Eigen::Vector<double, NU> v_double = V.col(ii).cast<double>();
+
+        sim_in_set(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+            acados_sim::acados_sim_in, "x", x_double.data());
+        sim_in_set(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+            acados_sim::acados_sim_in, "u", v_double.data());
+        acados_sim::status = quadcopter_acados_sim_solve(acados_sim::capsule);
+        if (acados_sim::status != ACADOS_SUCCESS)
+        {
+            printf("acados_solve() failed with status %d.\n", acados_sim::status);
+        }
+        Eigen::Vector<double, NX> x_double_next;
+        sim_out_get(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+               acados_sim::acados_sim_out, "x", x_double_next.data());
+        X.col(ii+1) = x_double_next.cast<float>();
+    }
+}
+
+void shiftAppendTerminalInPlace(Eigen::Matrix<float, NX, N+1>& X, Eigen::Matrix<float, NU, N>& U){
+    X.block(0,0,NX,N) = X.block(0, 1, NX, N); // shift
+    U.block(0,0,NU,N-1) = U.block(0, 1, NU, N-1); //shift
+    U.col(N-1) = (KmKdelta*X.col(N-1)).cwiseMin(u_max).cwiseMax(u_min); // terminal controller
+
+    Eigen::Vector<double, NX> x_double = X.col(N-1).cast<double>();
+    Eigen::Vector<double, NU> v_double = (U.col(N-1)-Kdelta*X.col(N-1)).cast<double>();
+    // now simulate one timestep
+    sim_in_set(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+    acados_sim::acados_sim_in, "x", x_double.data());
+    sim_in_set(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+        acados_sim::acados_sim_in, "u", v_double.data());
+    acados_sim::status = quadcopter_acados_sim_solve(acados_sim::capsule);
+    if (acados_sim::status != ACADOS_SUCCESS)
+    {
+        printf("acados_solve() failed with status %d.\n", acados_sim::status);
+    }
+    Eigen::Vector<double, NX> x_double_res;
+    sim_out_get(acados_sim::acados_sim_config, acados_sim::acados_sim_dims,
+            acados_sim::acados_sim_out, "x", x_double_res.data());
+    X.col(N) = x_double_res.cast<float>();    
+}
+
+
+//bool inStateConstr(const Eigen::Matrix<float,NX, N>& X){
+//    return ((X.colwise() - x_max).array() <= eps).all() && ((X.colwise() - x_min).array() >= -eps).all();
+//};
+
+bool inStateConstr(const Eigen::Matrix<float,NX, N>& X){
+    return ((Lx * X).array() <= (1 + eps)).all();
+};
+
+
+bool inTerminalConstr( const Eigen::Vector<float, NX>& x){
+    return ( x.transpose() * P * x - alphaSquared ) <= eps;
+};
+
+bool feasible(const Eigen::Matrix<float, NX, N+1>& X){
+    bool feasInState = inStateConstr(X.block(0,0,NX,N));
+    bool feasInTerm  = inTerminalConstr(X.col(N));
+    // std::cout << "feasInState " << feasInState << " feasInTerm " << feasInTerm << std::endl;
+    return feasInState && feasInTerm;
+}
+
+float stateCost(const Eigen::Matrix<float, NX, N>& X, const Eigen::Matrix<float, NX, NX>& Q){
+    const Eigen::Matrix<float, NX, N> QX = Q*X;
+    Eigen::Matrix<float, 1, N> XtQX;
+    for (size_t ii=0; ii<N; ii++){
+        XtQX(0,ii) = X.col(ii).dot(QX.col(ii));
+    }
+    return XtQX.sum();
+};
+
+float inputCost(const Eigen::Matrix<float, NU, N>& U, const Eigen::Matrix<float, NU, NU>& R){
+    const Eigen::Matrix<float, NU, N> RU = R*U;
+    Eigen::Matrix<float, 1, N> UtRU;
+    for (size_t ii=0; ii<N; ii++){
+         UtRU(0,ii) = U.col(ii).dot(RU.col(ii));
+    }
+    return UtRU.sum();
+};
+
+float terminalCost(const Eigen::Vector<float, NX> x, const Eigen::Matrix<float, NX, NX>& P){
+    return x.transpose()*P*x;
+};
+
+float cost(const Eigen::Matrix<float, NX, N+1>& X, const Eigen::Matrix<float, NU, N>& U)
+{
+    return stateCost(X.block(0,0,NX,N),Q) + inputCost(U,R) + terminalCost(X.col(N), P);
+};
+
+void saveData(std::string fileName, Eigen::MatrixXf  matrix){
+    const static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+ 
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << matrix.format(CSVFormat);
+        file.close();
+    }
+};
+
+int main() {
+    acados_sim::acadosSimInit();
+
+    Eigen::Vector<float, NX> x0{ {{x0}} };
+    Eigen::Matrix<float, NX, N+1> X_cand;
+    Eigen::Matrix<float, NX, N+1> X_pred;
+    X_cand.col(0) = x0;
+    X_pred.col(0) = x0;
+    Eigen::Matrix<float, NU, N> U_cand;
+    Eigen::Matrix<float, NU, N> U_pred;
+    Eigen::Matrix<float, NU, N> V_pred;
+
+    Eigen::Matrix<float, NX, Nsim> X_sim;
+    Eigen::Matrix<float, NU, Nsim> U_sim;
+
+    float candidate_cost = 0;
+    bool candidate_feasible = false;
+
+    std::array<std::chrono::duration<double>, Nsim> inf_times;
+        std::array<std::chrono::duration<double>, Nsim> aug_times;
+    
+    
+        for (std::size_t tt=0; tt < Nsim; tt++ ){
+            const auto start_inference = std::chrono::high_resolution_clock::now();
+            
+            // std::cout << "Iter: " << tt << std::endl;
+            x0 = X_cand.col(0);
+            // std::cout << "x0 = "<< x0.transpose() << std::endl;
+            const auto x0_normalized = embedded_nn_inference::quadcopter_nn::normalize_input(x0);
+            const auto output = embedded_nn_inference::quadcopter_nn::call_nn(x0_normalized);
+            V_pred = embedded_nn_inference::quadcopter_nn::reshape_output(output).transpose();
+            for (std::size_t ii=0; ii<N; ii++){
+                V_pred.col(ii) = embedded_nn_inference::quadcopter_nn::denormalize_output(V_pred.col(ii));
+            }
+    
+            const auto end_inference = std::chrono::high_resolution_clock::now();
+            inf_times.at(tt) = end_inference-start_inference;
+    
+            const auto start_aug = std::chrono::high_resolution_clock::now();
+            X_pred.col(0) = x0;
+            forwardSimulateTrajectoryClippedInputs(X_pred, U_pred, V_pred);
+    
+            // std::cout << "U_pred = \n"<< U_pred.transpose() << std::endl;
+            // std::cout << "\n\nX_pred = \n"<< X_pred.transpose() << std::endl;
+    
+            bool predicted_feasible = feasible(X_pred);
+            float predicted_cost = cost(X_pred, U_pred);
+    
+            if ( (predicted_feasible && (predicted_cost <= candidate_cost))
+                || !candidate_feasible){
+                X_cand = X_pred;
+                U_cand = U_pred;
+                candidate_feasible = predicted_feasible;
+                
+            };
+    
+            X_sim.col(tt) = X_cand.col(0);
+            U_sim.col(tt) = U_cand.col(0);
+    
+            shiftAppendTerminalInPlace(X_cand, U_cand);
+    
+            const auto end_aug = std::chrono::high_resolution_clock::now();
+            aug_times.at(tt) = end_aug - start_aug;
+        }
+        
+        std::chrono::duration<double> total_aug_time{0};
+        std::chrono::duration<double> total_inf_time{0};
+    
+        for(std::size_t tt=0; tt<Nsim; tt++){
+            total_aug_time += aug_times.at(tt);
+            total_inf_time += inf_times.at(tt);
+        }
+    
+        std::cout << "Inference avg. time " << total_inf_time/Nsim << std::endl;
+        std::cout << "Augmentation avg. time " << total_aug_time/Nsim << std::endl;
+    
+        saveData(std::string{"X_sim.csv"}, X_sim.transpose());
+        saveData(std::string{"U_sim.csv"}, U_sim.transpose());
+    }
