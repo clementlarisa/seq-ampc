@@ -186,8 +186,8 @@ def export_all_constants():
 N  = 20
 dt = 0.05
 q_weight = 1
-dq_weight = 1e-3
-ddq_weight = 4e-3
+dq_weight = 1e-4
+ddq_weight = 4e-4
 rho_c = 10
 w_c = 6
 weight_orientation_error = 5e1
