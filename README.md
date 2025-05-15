@@ -1,5 +1,6 @@
 # Updates
-- *2025-05-15*:Added C++ Eigen benchmark for real-time performance to [stirtank](./examples/stirtank/benchmark) and [quadcopter](./examples/quadcopter/benchmark)
+- *2025-05-15*: Added C++ Eigen benchmark for real-time performance to [stirtank](./examples/stirtank/benchmark) and [quadcopter](./examples/quadcopter/benchmark)
+- *2025-05-15*: Added additional numerical example on [robot arm control]()
 
 # Approximate non-linear model predictive control with safety-augmented neural networks
 Implementation of safety-augmentation and three numerical benchmark examples (stirtank reactor, quadcopter, and chain mass system). The paper describing the theory can be found [on arXiv](https://arxiv.org/abs/2304.09575).

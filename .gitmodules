@@ -1,0 +1,6 @@
+[submodule "examples/robotarm/benchmark/ext/eigen"]
+	path = examples/robotarm/benchmark/ext/eigen
+	url = https://gitlab.com/libeigen/eigen
+[submodule "examples/robotarm/benchmark/ext/highfive"]
+	path = examples/robotarm/benchmark/ext/highfive
+	url = https://github.com/highfive-devs/highfive
