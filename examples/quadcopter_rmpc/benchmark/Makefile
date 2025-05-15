@@ -1,4 +1,5 @@
 CC = g++
+
 # CXXFLAGS  = -std=c++20  -g -Wall -O3 -I -lstdc++ -msse2 -ffast-math -fassociative-math -fopt-info-vec -fgraphite-identity -ftree-loop-distribution -floop-nest-optimize -march=znver3
 CXXFLAGS  = -std=c++20  -g -Wall -O3 -I -lstdc++ -mavx2 -msse2 -mfma -march=znver3
 CXXFLAGS += -I/usr/local/include/eigen3
@@ -29,7 +30,7 @@ LDLIBS+= -lhpipm
 LDLIBS+= -lblasfeo
 LDLIBS+= -lm
 LDLIBS+= -l:libacados_sim_solver_quadcopter.so
-LDLIBS+= 
+# LDLIBS+= 
 
 DEPS = neural_network.hpp 
 OBJ = main.o 

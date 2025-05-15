@@ -13,7 +13,7 @@ extern "C" {
 #include <acados/utils/print.h>
 #include <acados/utils/math.h>
 #include <acados_c/sim_interface.h>
-#include <acados_sim_solver_quadcopter.h>
+#include <acados_sim_solver_{{name}}.h>
 }
 
 static constexpr std::size_t NX{QUADCOPTER_NX};
@@ -175,28 +175,57 @@ void saveData(std::string fileName, Eigen::MatrixXf  matrix){
     }
 };
 
-int main() {
+std::vector<Eigen::Vector<float, NX>> readCSV(const std::string& fileName, const size_t max_values=1000) {
+    std::ifstream file(fileName);
+    std::vector<Eigen::Vector<float, NX>> x0_values;
+    std::string line;
+    
+    while (std::getline(file, line), x0_values.size() < max_values) {
+        std::stringstream lineStream(line);
+        Eigen::Vector<float, NX> x0;
+        for (std::size_t i = 0; i < NX; ++i) {
+            std::string cell;
+            std::getline(lineStream, cell, ',');
+            x0[i] = std::stof(cell);
+        }
+        x0_values.push_back(x0);
+    }
+    return x0_values;
+}
+
+int main(int argc, char* argv[]) {
     acados_sim::acadosSimInit();
 
-    Eigen::Vector<float, NX> x0{ {{x0}} };
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <csvFileName>" << std::endl;
+        return 1;
+    }
+
+    std::string csvFileName = argv[1];
+    std::vector<Eigen::Vector<float, NX>> x0_values = readCSV(csvFileName);
+
     Eigen::Matrix<float, NX, N+1> X_cand;
     Eigen::Matrix<float, NX, N+1> X_pred;
-    X_cand.col(0) = x0;
-    X_pred.col(0) = x0;
+
     Eigen::Matrix<float, NU, N> U_cand;
     Eigen::Matrix<float, NU, N> U_pred;
     Eigen::Matrix<float, NU, N> V_pred;
 
-    Eigen::Matrix<float, NX, Nsim> X_sim;
-    Eigen::Matrix<float, NU, Nsim> U_sim;
+    std::chrono::duration<double> total_inf_time{0};
+    std::chrono::duration<double> total_aug_time{0};
+    std::size_t total_iterations = 0;
 
-    float candidate_cost = 0;
-    bool candidate_feasible = false;
-
-    std::array<std::chrono::duration<double>, Nsim> inf_times;
+    for (Eigen::Vector<float,NX> x0 : x0_values) {
+        float candidate_cost = 0;
+        X_cand.col(0) = x0;
+        X_pred.col(0) = x0;
+        bool candidate_feasible = false;
+        std::array<std::chrono::duration<double>, Nsim> inf_times;
         std::array<std::chrono::duration<double>, Nsim> aug_times;
-    
-    
+
+        Eigen::Matrix<float, NX, Nsim> X_sim;
+        Eigen::Matrix<float, NU, Nsim> U_sim;
+
         for (std::size_t tt=0; tt < Nsim; tt++ ){
             const auto start_inference = std::chrono::high_resolution_clock::now();
             
@@ -239,18 +268,17 @@ int main() {
             const auto end_aug = std::chrono::high_resolution_clock::now();
             aug_times.at(tt) = end_aug - start_aug;
         }
-        
-        std::chrono::duration<double> total_aug_time{0};
-        std::chrono::duration<double> total_inf_time{0};
-    
+            
         for(std::size_t tt=0; tt<Nsim; tt++){
             total_aug_time += aug_times.at(tt);
             total_inf_time += inf_times.at(tt);
         }
-    
-        std::cout << "Inference avg. time " << total_inf_time/Nsim << std::endl;
-        std::cout << "Augmentation avg. time " << total_aug_time/Nsim << std::endl;
-    
-        saveData(std::string{"X_sim.csv"}, X_sim.transpose());
-        saveData(std::string{"U_sim.csv"}, U_sim.transpose());
+        total_iterations += Nsim; // Account for all time steps for this x0
+
+        // saveData(std::string{"X_sim.csv"}, X_sim.transpose());
+        // saveData(std::string{"U_sim.csv"}, U_sim.transpose());
     }
+
+    std::cout << "Inference avg. time " << total_inf_time/total_iterations << std::endl;
+    std::cout << "Augmentation avg. time " << total_aug_time/total_iterations << std::endl;
+}

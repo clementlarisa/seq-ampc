@@ -137,7 +137,8 @@ if __name__=='__main__':
         'u_max': np2cpp(u_max),
         'Lx': np2cpp(Lx[:5, :].transpose()),
         'nconstr': nconstr,
-        'x0': np2cpp(x0)
+        'x0': np2cpp(x0),
+        'name': "quadcopter"
     }
     output = template_main.render(template_values)
     with open('benchmark/main.cpp', 'w') as f:

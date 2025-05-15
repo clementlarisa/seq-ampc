@@ -66,6 +66,39 @@ def export_quadcopter_ode_model():
 
     return model
 
+def export_quadcopter_sim_model():
+    nx = 10
+    nu = 3
+
+    model_name = 'quadcopter'
+    
+    Kdelta = np.reshape(np.genfromtxt(fp.joinpath('mpc_parameters','Kdelta.txt'), delimiter=','), (nx,nu)).T
+
+    x = SX.sym('x', nx, 1)
+    u = SX.sym('u', nu, 1)       
+    xdot = SX.sym('xdot', nx, 1)
+    
+    v = SX.sym('v', nu, 1)
+    u = Kdelta @ x + v
+
+    fx = f(x,u)
+    f_impl = vertcat(*fx)-xdot
+    
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    # model.f_expl_expr = f_expl
+    model.x = x
+    model.xdot = xdot
+    model.u = v
+
+    # model.z = z
+    model.p = []
+    model.name = model_name
+
+    return model
+
 def sample_mpc(
         showplot=True,
         experimentname="",
@@ -447,7 +480,8 @@ def parallel_sample_mpc(instances=16, samplesperinstance=int(1e5), prefix="Clust
 
 def computetime_test_fwd_sim_quadcopter(dataset="latest"):
     name = 'quadcopter'
-    model = export_quadcopter_ode_model()
+    # model = export_quadcopter_ode_model()
+    model = export_quadcopter_sim_model()
     Tf = float(np.genfromtxt(fp.joinpath('mpc_parameters','Tf.txt'), delimiter=','))
     N = 10
     sim = AcadosSim()
@@ -457,13 +491,13 @@ def computetime_test_fwd_sim_quadcopter(dataset="latest"):
     sim.solver_options.integrator_type = 'IRK'
     sim.solver_options.num_stages  = 4                     # number of stages in the integrator
     sim.solver_options.num_steps   = 1                     # number of steps in the integrator
-    sim.solver_options.newton_iter = 3                     # number of Newton iterations in simulation method
+    sim.solver_options.newton_iter = 1                     # number of Newton iterations in simulation method
+    sim.solver_options.ext_fun_compile_flags = "-O3"                     # number of Newton iterations in simulation method
 
     acados_integrator = AcadosSimSolver(sim, 'acados_ocp_' + name + '_sim.json')
 
     def run(x0, V):
-        X = np.zeros((V.shape[0]+1,x0.shape[0]+1 ))
-        X[0] = np.copy(np.append(x0,0))
+        X = np.zeros((V.shape[0]+1,x0.shape[0] ))
         for i in range(len(V)):
             X[i+1] = acados_integrator.simulate(x=X[i], u=V[i])
         return X

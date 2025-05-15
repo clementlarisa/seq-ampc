@@ -237,6 +237,9 @@ class MPCQuadraticCostLxLu(MPC):
         self.__umin = 1/np.min(self.Lu, 0) # possibly crude / wrong if not box constraints!!!
         self.__umax = 1/np.max(self.Lu, 0) # possibly crude / wrong if not box constraints!!!
 
+        self.__xmin = 1/np.min(self.Lx, 0) # possibly crude / wrong if not box constraints!!!
+        self.__xmax = 1/np.max(self.Lx, 0) # possibly crude / wrong if not box constraints!!!
+
         # # if no explicit Lx and Lu are supplied, we compute them here...
         # if Lx==None and Lu==None:
         #     self.__Lx = np.vstack((np.diag(1/xmax), np.diag(1/xmin)))
@@ -282,6 +285,12 @@ class MPCQuadraticCostLxLu(MPC):
     @property
     def Kdelta(self):
         return self.__Kdelta
+    
+    def get_uminmax(self):
+        return self.__umin, self.__umax
+
+    def get_xminmax(self):
+        return self.__xmin, self.__xmax
 
     def in_state_and_input_constraints(self, X, U, verbose = False, eps = 1e-4, robust=False, only_states=True):
         # return np.all((self.__Lx@(X[:-1]).T + self.__Lu@U.T <= 1), axis=0)

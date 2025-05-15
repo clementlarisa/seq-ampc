@@ -1,0 +1,49 @@
+#ifndef NEURAL_NETWORK_HPP
+#define NEURAL_NETWORK_HPP
+
+#include <Eigen/Dense>
+
+namespace embedded_nn_inference{
+
+    using namespace std;
+
+    namespace {{name}} {
+
+    {% for layer in layer_list %}
+    Eigen::MatrixXf w{{loop.index}}{{layer.weights}};
+    Eigen::VectorXf b{{loop.index}}{ {{layer.bias}} };
+    Eigen::VectorXf res{{loop.index}}({{layer.output_size}});
+    {% endfor %}
+
+    Eigen::Vector<float, {{output_size*output_horizont}}> call_nn(const Eigen::Vector<float, {{input_size}}>& input){
+        {% for layer in layer_list %}
+        {% if loop.first %} res{{loop.index}} = (w{{loop.index}}*input + b{{loop.index}});        
+        {%else%} res{{loop.index}} = (w{{loop.index}}*res{{loop.index-1}} + b{{loop.index}});{% endif %}
+        {% if layer.activation=='TANH'%}res{{loop.index}} = res{{loop.index}}.array().tanh(); {% endif %}
+        {% if loop.last%}return res{{loop.index}};{%endif%}
+        {% endfor %}
+    };
+
+    Eigen::Vector<float, {{input_size}}>  input_offset{ {{input_offset}} };
+    Eigen::Vector<float, {{input_size}}>  input_scale{ {{input_scale}} };
+    Eigen::Vector<float, {{output_size}}> output_offset{ {{output_offset}} };
+    Eigen::Vector<float, {{output_size}}> output_scale{ {{output_scale}} };
+    
+    Eigen::Vector<float, {{input_size}}> normalize_input(    const Eigen::Vector<float, {{input_size}}>& in  ){
+        Eigen::Vector<float, {{input_size}}> res;
+        res = (in - input_offset).array() / input_scale.array();
+        return res;
+    };
+
+    Eigen::Vector<float, {{output_size}}> denormalize_output( const Eigen::Vector<float, {{output_size}}>& out ){
+        Eigen::Vector<float, {{output_size}}> res;
+        res = out.array()*output_scale.array();
+        res = res + output_offset;
+        return res;
+    };
+    Eigen::Matrix<float, {{output_horizont}}, {{output_size}}> reshape_output(const Eigen::Vector<float, {{output_horizont*output_size}}>& out){
+        return out.reshaped({{output_size}}, {{output_horizont}}).transpose();
+    };
+    } // namespace {{name}}
+}
+#endif
