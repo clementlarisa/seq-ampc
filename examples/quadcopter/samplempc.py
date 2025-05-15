@@ -74,6 +74,40 @@ def export_quadcopter_ode_model():
     return model
 
 
+def export_quadcopter_sim_model():
+    nx = 10
+    nu = 3
+
+    model_name = 'quadcopter'
+    
+    Kdelta = np.reshape(np.genfromtxt(fp.joinpath('mpc_parameters','Kdelta.txt'), delimiter=','), (nx,nu)).T
+
+    x = SX.sym('x', nx, 1)
+    u = SX.sym('u', nu, 1)       
+    xdot = SX.sym('xdot', nx, 1)
+    
+    v = SX.sym('v', nu, 1)
+    u = Kdelta @ x + v
+
+    fx = f(x,u)
+    f_impl = vertcat(*fx)-xdot
+    
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    # model.f_expl_expr = f_expl
+    model.x = x
+    model.xdot = xdot
+    model.u = v
+
+    # model.z = z
+    model.p = []
+    model.name = model_name
+
+    return model
+
+
 def sample_mpc(
         showplot=True,
         experimentname="",

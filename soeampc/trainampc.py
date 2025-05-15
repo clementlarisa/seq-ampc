@@ -3,7 +3,7 @@ import tensorflow.keras as keras
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras import layers
-from keras.layers.core import Lambda
+from keras.layers import Lambda
 from keras.callbacks import EarlyStopping
 # from keras.backend import clip
 import keras.backend as backend
