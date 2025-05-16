@@ -3,6 +3,8 @@ A 12-DoF state robot arm tracking example, third joint of the Franka is locked t
 You can find the pretrained models and dataset on [Zenodo]().
 Due to Zenodo's limitation to 50GB per dataset, we only uploaded about 20% of samples used in the paper.
 
+This example does not work with the provided docker container! Please use an up-to-date `python 3.13` with `casadi` and `jax` installed.
+
 ## MPC ingredients
 To compute the MPC ingredients, run the [`lmi_casadi.py`](./synthesize/lmi_casadi.py) file in Python (requires MOSEK solver).
 The output of the Python file are already available as [`matrices.npz`](./synthesize/matrices.npz).
