@@ -1,6 +1,6 @@
 # Robot arm (stand-alone example)
 A 12-DoF state robot arm tracking example, third joint of the Franka is locked to avoid set-valued solutions.
-You can find the pretrained models and dataset on [Zenodo]().
+You can find the pretrained models and dataset on [Zenodo](https://zenodo.org/records/15441361).
 Due to Zenodo's limitation to 50GB per dataset, we only uploaded about 20% of samples used in the paper.
 
 This example does not work with the provided docker container! Please use an up-to-date `python 3.13` with `casadi` and `jax` installed.
