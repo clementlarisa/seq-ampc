@@ -1,6 +1,18 @@
+
+import os
+
+from soeampc.simple_rnn_ar import RNN_AR_RolloutModel
+
+# hard-disable XLA paths that trigger PTX tempfiles
+os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+os.environ["XLA_FLAGS"] = "--xla_gpu_autotune_level=0"
+os.environ["TF_ENABLE_XLA"] = "0"
+from enum import Enum
+
 import matplotlib.pyplot as plt
 import tensorflow.keras as keras
 import tensorflow as tf
+tf.config.optimizer.set_jit(False)
 import numpy as np
 from tensorflow.keras import layers
 from keras.layers import Lambda
@@ -15,6 +27,7 @@ import time
 
 import math
 
+from .RNN_rollout import RNNRolloutModel
 from .datasetutils import print_compute_time_statistics, mpc_dataset_import
 from .mpcproblem import MPCQuadraticCostLxLu
 
@@ -23,17 +36,36 @@ from datetime import datetime
 import os
 import errno
 
+class NeuralType(Enum):
+    MLP = "mlp"
+    LSTM = "lstm"
+    RNN = "rnn"
+    RNN_AR = "rnn_ar"
+
 def import_model(modelname="latest"):
-    """imports tensorflow keras model    
-    """
-    p = Path("models").joinpath(modelname)
-    model = keras.models.load_model(p)
-    return model
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath(modelname)
+
+    # Keras v3 native format
+    if p.is_file() and p.suffix == ".keras":
+        print(f"Loading keras model {modelname}")
+        return keras.models.load_model(p)
+
+    # Legacy H5
+    if p.is_file() and p.suffix == ".h5":
+        return keras.models.load_model(p)
+
+     # TF SavedModel directory
+    if p.is_dir() and (p / "saved_model.pb").exists():
+        # Use legacy Keras 2 loader
+        import tf_keras  # provided by the `tf-keras` package
+        return tf_keras.models.load_model(str(p))
+
+    raise ValueError(f"Unrecognized model format at: {p}")
 
 def export_model(model, modelname):
     """exports tensorflow keras model
     """
-    p = Path("models")
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/models")
     model.save(p.joinpath(modelname))
     link_name=p.joinpath("latest")
     target=modelname
@@ -48,10 +80,10 @@ def export_model(model, modelname):
 
 def export_model_mpc(mpc, model, modelname):
     export_model(model, modelname)
-    mpc.savetxt(Path("models").joinpath(modelname, "mpc_parameters"))
+    mpc.savetxt(Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath(modelname, "mpc_parameters"))
 
 def import_model_mpc(modelname, mpcclass=MPCQuadraticCostLxLu):
-    p = Path("models").joinpath(modelname, "mpc_parameters")
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath(modelname, "mpc_parameters")
     mpc = mpcclass.genfromtxt(p)
     model = import_model(modelname)
     return mpc, model
@@ -86,7 +118,7 @@ def import_model_mpc(modelname, mpcclass=MPCQuadraticCostLxLu):
 #     e = 0
 #     return Jpred + e - Jtrue
 
-def generate_model(traindata, architecture, output_shape):
+def generate_model(traindata, neural_type, architecture, output_shape, rnn_units=32, dense_units=(50,)):
     """returns a fully connected feedforward NN normalized to traindata
     
     Input layer is normalizer to traindata, hidden layers are tanh activation,
@@ -103,62 +135,56 @@ def generate_model(traindata, architecture, output_shape):
     Returns:
         tensorflow keras model
     """
-    X_normalizer = layers.Normalization(input_shape=[architecture[0],], axis=None)
-    X_normalizer.adapt(traindata)
+    if neural_type == NeuralType.MLP:
+        X_normalizer = layers.Normalization(input_shape=[architecture[0], ], axis=None)
+        X_normalizer.adapt(traindata)
 
-    model = keras.Sequential()
-    model.add(X_normalizer)
+        model = keras.Sequential()
+        model.add(X_normalizer)
+        for units in architecture[:-1]:
+            initializer = tf.keras.initializers.GlorotNormal()
+            model.add(layers.Dense(units=units, activation="tanh", kernel_initializer=initializer))
 
-    for units in architecture[:-1]:
-        initializer = tf.keras.initializers.GlorotNormal()
-        model.add(layers.Dense(units=units, activation="tanh", kernel_initializer=initializer))
+        model.add(layers.Dense(units=architecture[-1], activation="linear"))
+        model.add(layers.Reshape(output_shape))
 
-    model.add(layers.Dense(units=architecture[-1], activation="linear"))
-    model.add(layers.Reshape(output_shape))
+    elif neural_type == NeuralType.RNN:
+        # traindata is expected shape (Nsamples, Tin, n_features) after expand_dims in architecture_search
+        # output_shape is expected (N, nu) for raw Y or (1, N, nu) for expanded RNN Y
+        if len(output_shape) == 3:
+            # Y_train was expanded to (batch, 1, N, nu)
+            rollout_horizon = int(output_shape[1])   # N
+            out_dim = int(output_shape[2])           # nu
+        elif len(output_shape) == 2:
+            rollout_horizon = int(output_shape[0])   # N
+            out_dim = int(output_shape[1])           # nu
+        else:
+            raise ValueError(f"Unsupported RNN output_shape={output_shape}")
 
+        model = RNNRolloutModel(rollout_horizon, rnn_units=rnn_units, dense_units=dense_units, out_dim=out_dim)
+        model.adapt_normalizer(traindata)
+        model.build(traindata.shape)
 
-    # if clipped_mae:
+    elif neural_type == NeuralType.RNN_AR:
+        T = traindata.shape[1]
+        model = RNN_AR_RolloutModel(T, rnn_units=rnn_units, dense_units=dense_units, out_dim=3)
+        model.adapt_normalizer(traindata)
+        model.build(traindata.shape)
 
-    #     def lam(x):
-    #         from keras import backend
-    #         ue      = 0.7853
-    #         umin = -ue
-    #         umax = 2-ue
-    #         return backend.clip(x, min_value=umin, max_value=umax)
-        
-    #     model.add(Lambda(lam, input_shape=(None, 10), output_shape=(None, 10)))
-    #     loss=clipped_mae
-    # else:
-        # loss='mean_absolute_error'
     loss='mean_absolute_error'
-    # loss='mean_squared_error'
 
-    # initial_learning_rate = 0.01
-    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-    #         initial_learning_rate,
-    #         decay_steps=1000,
-    #         decay_rate=0.96,
-    #         staircase=True)
- 
-
-    # def get_lr_metric(optimizer):
-    #     def lr(y_true, y_pred):
-    #         return optimizer._decayed_lr(tf.float32) # I use ._decayed_lr method instead of .lr
-    #     return lr
-
-    # optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
     
-    # lr_metric = get_lr_metric(optimizer)
-
     model.compile(
         optimizer=optimizer,
         loss=loss,
-        metrics=['mse', 'mae'])
+        metrics=['mse', 'mae'],
+        jit_compile=False,
+    )
 
     return model
 
-def train_model(model, X_train, Y_train, batch_size=int(1e4), max_epochs=int(1e3), patience=int(1e3), learning_rate=1e-3):
+def train_model(neural_type, model, X_train, Y_train, batch_size=int(1e4), max_epochs=int(1e3), patience=int(1e3), learning_rate=1e-3, rnn_units=32, dense_units=(50,), model_name_prefix=None):
     """trains a given model on X,Y dataset
 
     Args:
@@ -180,27 +206,59 @@ def train_model(model, X_train, Y_train, batch_size=int(1e4), max_epochs=int(1e3
         trained tensorflow keras model
     """
 
-    backend.set_value(model.optimizer.learning_rate, learning_rate)
+    def _fmt_units(units):
+        if units is None:
+            return "none"
+        if isinstance(units, (list, tuple)):
+            return "x".join(str(int(u)) for u in units)
+        return str(int(units))
 
-    overfitCallback = EarlyStopping(monitor='loss', min_delta=0, patience = patience)
+    # backend.set_value(model.optimizer.learning_rate, learning_rate)
+    # NEW
+    model.optimizer.learning_rate.assign(learning_rate)
 
-    checkpoint_filepath = Path("models").joinpath("checkpoint")
+    overfitCallback = EarlyStopping(monitor='val_loss', min_delta=0, patience = patience, restore_best_weights=True)
+    rnn_str = _fmt_units(rnn_units)
+    dense_str = _fmt_units(dense_units)
+
+    base_model_name = (
+        f"{neural_type}"
+        f"_rnn{rnn_str}"
+        f"_dense{dense_str}"
+        f"_bs{batch_size}"
+        f"_ep{max_epochs}"
+        f"_pat{patience}"
+        f"_lr{learning_rate:g}"
+    )
+
+    if model_name_prefix:
+        safe_prefix = str(model_name_prefix).replace(" ", "_").replace("/", "_")
+        model_name = f"{safe_prefix}_{base_model_name}"
+    else:
+        model_name = base_model_name
+
+    checkpoint_filepath = Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath(
+        model_name + "_checkpoint.keras"
+    )
+
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_filepath,
         verbose=1,
-        # save_weights_only=True,
-        save_freq='epoch',
-        period = 100
-        )
+        save_freq="epoch",
+        save_best_only=True,
+    )
 
+    learning_curve_callback = tf.keras.callbacks.CSVLogger(
+        f"/share/mihaela-larisa.clement/soeampc-data/models/learning_curves/{model_name}.csv"
+    )
     history = model.fit(
         X_train,
         Y_train,
-        verbose=2,
+        verbose=1,
         batch_size=batch_size,
         epochs=max_epochs,
         validation_split = 0.1,
-        callbacks=[overfitCallback, model_checkpoint_callback]
+        callbacks=[overfitCallback, model_checkpoint_callback, learning_curve_callback]
         )
     
     return model
@@ -230,15 +288,70 @@ def retrain_model(dataset="latest", model_name="latest", batch_size=int(1e4), ma
     architecture_string=model_name.split('_',1)[0]
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.1, random_state=42)
     print("X[42]", X_train[42])
-    model = train_model(model=model, X_train=X_train, Y_train=Y_train, batch_size=batch_size, max_epochs=max_epochs, patience=patience, learning_rate=learning_rate)
+    model = train_model(model=model, X_train=X_train, Y_train=Y_train, batch_size=batch_size, max_epochs=max_epochs, patience=patience, learning_rate=learning_rate )
     testresult, mu = statistical_test(mpc, model, X_test, Y_test)
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     modelname = architecture_string + '_mu=' + ('%.2f' % mu) + '_' + date
     export_model(model, modelname)
     return model
 
+def run_statistical_test(mpc, X, Y, neural_type, architectures, mu_crit=0.6, p_testpoints=int(1e3), retrain_model_name="latest"):
+    print("\nperforming statistical test\n")
+    # import tensorflow as tf
+    # gpus = tf.config.experimental.list_physical_devices('GPU')
+    # if gpus:
+    #     for i in range(len(gpus)):
+    #         tf.config.experimental.set_virtual_device_configuration(gpus[i], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=24576)])
 
-def architecture_search(mpc, X, Y, architectures, hyperparameters, mu_crit=0.6, p_testpoints=int(10e3)):
+    print(f"{retrain_model_name}")
+
+    X_train_raw, X_test_raw, Y_train_raw, Y_test_raw = train_test_split(X, Y, test_size=0.1, random_state=42)
+
+    X_train = X_train_raw
+    Y_train = Y_train_raw
+    X_test  = X_test_raw
+    Y_test  = Y_test_raw
+
+    output_shape=Y_train.shape[1:]
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/models")
+    p.mkdir(parents=True,exist_ok=True)
+    for a in architectures:
+        expected_input_dim = X.shape[-1]  # works for flat X before RNN expand_dims
+        if a[0] != expected_input_dim:
+            raise Exception(
+                f'architecture input neurons ({a[0]}) do not match feature dimension ({expected_input_dim})'
+            )
+        if a[-1] != mpc.nu*mpc.N:
+            raise Exception('architecture does not have nu*N output neurons')
+        print("\n\n===============================================")
+        print(f"Statistical test on {retrain_model_name}")
+        print("===============================================\n")
+        if neural_type in [NeuralType.RNN, NeuralType.RNN_AR]:
+            X_train = np.expand_dims(X_train_raw, axis=1)
+            Y_train = np.expand_dims(Y_train_raw, axis=1)
+            X_test = np.expand_dims(X_test_raw, axis=1)
+            Y_test = np.expand_dims(Y_test_raw, axis=1)
+            model = import_model(retrain_model_name)
+        elif neural_type == NeuralType.MLP:
+            model = import_model(retrain_model_name)
+            
+        model.summary()
+
+        testresult, mu = statistical_test(
+                        mpc,
+                        model,
+                        X_test_raw,
+                        Y_test_raw,
+                        p=p_testpoints,
+                        mu_crit=mu_crit
+                    )
+            
+            # if testresult:
+            #     return model
+        # print(f"Training time was {time.time()-tic} [s]")
+    return None
+
+def architecture_search(mpc, X, Y, neural_type, architectures, hyperparameters, rnn_units=32, dense_units=(50,), mu_crit=0.6, p_testpoints=int(10e3), retrain=False, retrain_model_name="latest", model_name_prefix=None):
     """Crude search for "good enough" approximator for predicting Y from X
 
     The list of architectures is traversed until a model achieves at least the desired mu_crit.
@@ -261,122 +374,212 @@ def architecture_search(mpc, X, Y, architectures, hyperparameters, mu_crit=0.6, 
         tensorflow keras model that achieves mu_crit or None, if no model achieves mu_crit.        
     """
     print("\nperforming architecture search\n")
-    import tensorflow as tf
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        for i in range(len(gpus)):
-            tf.config.experimental.set_virtual_device_configuration(gpus[i], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=24576)])
+    # import tensorflow as tf
+    # gpus = tf.config.experimental.list_physical_devices('GPU')
+    # if gpus:
+    #     for i in range(len(gpus)):
+    #         tf.config.experimental.set_virtual_device_configuration(gpus[i], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=24576)])
 
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.1, random_state=42)
+    print(f"{retrain}")
+    print(f"{retrain_model_name}")
+
+    X_train_raw, X_test_raw, Y_train_raw, Y_test_raw = train_test_split(X, Y, test_size=0.1, random_state=42)
+
+    X_train = X_train_raw
+    Y_train = Y_train_raw
+    X_test  = X_test_raw
+    Y_test  = Y_test_raw
+
     output_shape=Y_train.shape[1:]
-    p = Path("models")
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/models")
     p.mkdir(parents=True,exist_ok=True)
     for a in architectures:
-        if a[0] != mpc.nx:
-            raise Exception('architecture does not have nx input neurons')
+        expected_input_dim = X.shape[-1]  # works for flat X before RNN expand_dims
+        if a[0] != expected_input_dim:
+            raise Exception(
+                f'architecture input neurons ({a[0]}) do not match feature dimension ({expected_input_dim})'
+            )
         if a[-1] != mpc.nu*mpc.N:
             raise Exception('architecture does not have nu*N output neurons')
         print("\n\n===============================================")
-        print("Training Model",a)
+        print(f"Training {neural_type} Model")
         print("===============================================\n")
-        model = generate_model(X_train, a, output_shape)
+        if neural_type in [NeuralType.RNN, NeuralType.RNN_AR]:
+            X_train = np.expand_dims(X_train_raw, axis=1)
+            Y_train = np.expand_dims(Y_train_raw, axis=1)
+            X_test = np.expand_dims(X_test_raw, axis=1)
+            Y_test = np.expand_dims(Y_test_raw, axis=1)
+
+            if retrain:
+                model = import_model(retrain_model_name)
+            else:
+                model = generate_model(X_train, neural_type, a, output_shape, dense_units=dense_units, rnn_units=rnn_units)
+        elif neural_type == NeuralType.MLP:
+            if retrain:
+                model = import_model(retrain_model_name)
+            else:
+                model = generate_model(X_train, neural_type, a, output_shape)
         model.summary()
         tic = time.time()
         for hp in hyperparameters:
             print("training with hyperparameters:",hp)
             model = train_model(
+                neural_type,
                 model, X_train,
                 Y_train,
                 batch_size=hp["batch_size"],
                 max_epochs=hp["max_epochs"],
                 patience=hp["patience"],
-                learning_rate=hp["learning_rate"])
-            testresult, mu = statistical_test(mpc, model, X_test, Y_test, p=p_testpoints, mu_crit=mu_crit)
+                learning_rate=hp["learning_rate"],
+                rnn_units=rnn_units, dense_units=dense_units,
+                model_name_prefix=model_name_prefix)
+            testresult, mu = statistical_test(
+                            mpc,
+                            model,
+                            X_test_raw,
+                            Y_test_raw,
+                            p=p_testpoints,
+                            mu_crit=mu_crit
+                        )
             date = datetime.now().strftime("%Y%m%d-%H%M%S")
-            modelname = '-'.join([str(d) for d in a]) + '_mu=' + ('%.2f' % mu) + '_' + date
+            arch_str = '-'.join([str(d) for d in a])
+
+            prefix = ""
+            if model_name_prefix:
+                # optional sanitization
+                safe_prefix = str(model_name_prefix).replace(" ", "_").replace("/", "_")
+                prefix = safe_prefix + "_"
+
+            modelname = f"{prefix}{arch_str}_mu={mu:.2f}_{date}.keras"
             export_model(model, modelname)
 
             print(f"Training time so far was {time.time()-tic} [s]")
-            if testresult:
-                return model
+            # if testresult:
+            #     return model
         # print(f"Training time was {time.time()-tic} [s]")
     return None
 
 
-def statistical_test(mpc, model, testpoints_X, testpoints_V, p=int(10e3), delta_h=0.10, mu_crit=0.80):
-    """Tests if model yields a yields a feasible solution to mpc in mu_crit fraction of feasible set
-    
-    Uses Hoeffdings inequality on indicator function I. If I(x0) = 1 iff model(x0) is a feasible solution to mpc problem. testpoints_X should be iid samples from feasible set of mpc.
-    mean(I) is compared to mu_crit using Hoeffdings inequality with confidence level delta_h.
-    If the test is successfully passed, the model will yield a feasible solution to the mpc problem for an initial condition x0 drawn randomly from the feasible set of the mpc, in at least mu_crit percent of cases with a confidence level delta_h.
+def statistical_test(mpc, model, testpoints_X, testpoints_V, p=int(1e3), delta_h=0.10, mu_crit=0.80):
+    """Tests if model yields a feasible solution to mpc in mu_crit fraction of feasible set.
 
-    Args:
-        mpc:
-            mpc class object, that should implement a method `mpc.forward_simulate_trajectory(x0,V)` and `mpc.feasible(X,V)`
-        model:
-            model class object, that should implement a call operator `model(x0).numpy()`.
-            This would typically be a keras / tensorflow model
-        testpoints_X:
-            numpy array of N samples of initial states x0.
-            testpoints_X.shape=(Nsamples,mpc.nx)
-        testpoints_V:
-            numpy array of N samples of input sequences corresponding to states x0.
-            testpoints_V.shape=(Nsamples, mpc.N, mpc.nu)
-        p:
-            number of samples to evaluate, p should be less than Nsamples
-        delta_h:
-            required confidence level
-        mu_crit:
-            required accuracy
+    Supports augmented NN inputs:
+      - testpoints_X may have shape (Nsamples, n_features) with n_features >= mpc.nx
+      - the model receives the full feature vector
+      - MPC rollout/feasibility uses only the first mpc.nx entries as the physical state x0
 
-    Returns:
-        A tuple (passed, mu), where passed is boolean indicating if mu_crit is achieved and mu
-            is mean(I)
+    Uses Hoeffdings inequality on indicator function I. If I(x0) = 1 iff model(x0) is a feasible
+    solution to mpc problem. testpoints_X should be iid samples from feasible set of mpc (or
+    augmented features whose first mpc.nx entries are iid states from the feasible set).
     """
     p = min(np.shape(testpoints_X)[0], p)
     print("\noffline testing on \n\tp = ", p)
 
+    # Basic shape guard
+    if np.shape(testpoints_X)[-1] < mpc.nx:
+        raise ValueError(
+            f"testpoints_X feature dim {np.shape(testpoints_X)[-1]} is smaller than mpc.nx={mpc.nx}"
+        )
+    
+    rng = np.random.default_rng(seed=42)
+    p = min(testpoints_X.shape[0], p)
+    ids = rng.choice(testpoints_X.shape[0], size=p, replace=False)
+
+    testpoints_X_rand = testpoints_X[ids]
+    testpoints_V_rand = testpoints_V[ids]   
+
     I = np.zeros(p)
-    dist = np.zeros((p,mpc.nu))
-    
-    inference_times=np.zeros(p)
-    forward_sim_times=np.zeros(p)
-    
+    dist = np.zeros((p, mpc.nu))
+
+    inference_times = np.zeros(p)
+    forward_sim_times = np.zeros(p)
+
+    # old (breaks for subclassed models)
+    # input_shape = model.input_shape
+    # if isinstance(input_shape, list):
+    #     input_shape = input_shape[0]
+    # model_input_rank = len(input_shape)
+
+    # new (robust)
+    model_input_rank = None
+
+    try:
+        input_shape = getattr(model, "input_shape", None)
+        if input_shape is not None:
+            if isinstance(input_shape, list):
+                input_shape = input_shape[0]
+            model_input_rank = len(input_shape)
+    except Exception:
+        model_input_rank = None
+
+    if model_input_rank is None:
+        cls_name = model.__class__.__name__
+        if cls_name in ("RNNRolloutModel", "RNN_AR_RolloutModel"):
+            model_input_rank = 3   # (batch, time, features)
+        else:
+            model_input_rank = 2   # fallback for MLP
+
+    print("HELLO")
+    print(f"{testpoints_X_rand[0].shape}")
+
     for j in tqdm(range(p)):
-        
-        x0 = testpoints_X[j, :]
-        Vtrue = testpoints_V[j]
+        # Full feature vector for NN inference (may include appended obstacle features)
+        x_feat = np.asarray(testpoints_X_rand[j])
+ 
+        x_feat = np.squeeze(x_feat)
+
+        # Raw x0 for MPC simulator/feasibility (must remain the true state dimension)
+        x0 = np.asarray(x_feat[:mpc.nx], dtype=float).reshape(mpc.nx,)
+
+        # Ground-truth control sequence
+        Vtrue = np.asarray(testpoints_V_rand[j])
+        Vtrue = np.squeeze(Vtrue)  # ensure (N, nu)
+
         tic = time.time()
-        V = model(x0).numpy()
-        inference_times[j] = time.time()-tic
-        V = np.reshape(V, (mpc.N, mpc.nu))
-        
-        # for k in range(mpc.nu):
-        #     U[k,:] = np.clip(U[k,:], mpc.umin[k], mpc.umax[k])
+
+        # Model input formatting
+        if model_input_rank == 3:
+            # RNN case: (batch, T, n_features) with T=1
+            x_batch = x_feat[None, None, :]
+        elif model_input_rank == 2:
+            # MLP case: (batch, n_features)
+            x_batch = x_feat[None, :]
+        else:
+            raise ValueError(
+                f"Unsupported model input rank: {model_input_rank}, input_shape={input_shape}"
+            )
+
+        V = model(x_batch).numpy()
+        V = np.squeeze(V, axis=0)   # remove batch dim
+        V = np.squeeze(V)           # remove possible T=1 dim for RNN outputs
+        inference_times[j] = time.time() - tic
+
+        V = np.asarray(V, dtype=float).reshape(mpc.N, mpc.nu)
+
         tic = time.time()
-        X = mpc.forward_simulate_trajectory_clipped_inputs(x0,V)
+        X = mpc.forward_simulate_trajectory_clipped_inputs(x0, V)  # x0 is true state only
         forward_sim_times[j] = time.time() - tic
-        I[j] = mpc.feasible(X,V, only_states=True)
-        
-        dist[j] = np.linalg.norm(V-Vtrue, np.inf, 0)
-    
+
+        I[j] = mpc.feasible(X, V, only_states=True)
+        dist[j] = np.linalg.norm(V - Vtrue, np.inf, 0)
+
     mu = np.mean(I)
     print("\t mean(I) =", mu)
-    
-    epsilon = math.sqrt(-math.log(delta_h/2)/(2*p))
+
+    epsilon = math.sqrt(-math.log(delta_h / 2) / (2 * p))
     print("\t epsilon =", epsilon)
 
-    if len(I[I==1])>0:
-        worst_case_passing_dist = np.max(dist[I==1],0)
+    if len(I[I == 1]) > 0:
+        worst_case_passing_dist = np.max(dist[I == 1], 0)
         print("\t worst case passing dist (I==1): V-Vtrue =", worst_case_passing_dist)
     else:
         print("\t worst case passing dist (I==1) not computed, no testpoint passed the test")
-    if len(I[I==0])>0:
-        best_case_not_passing_dist = np.min(dist[I==0],0)
+
+    if len(I[I == 0]) > 0:
+        best_case_not_passing_dist = np.min(dist[I == 0], 0)
         print("\t best case not passing dist (I==0): V-Vtrue =", best_case_not_passing_dist)
     else:
-        print("\t best case not passing dist (I==0) not omputed, all points passed the test")
-
+        print("\t best case not passing dist (I==0) not computed, all points passed the test")
 
     print("\ninference time statistics:")
     print_compute_time_statistics(inference_times)
@@ -386,7 +589,8 @@ def statistical_test(mpc, model, testpoints_X, testpoints_V, p=int(10e3), delta_
     if mu_crit <= mu - epsilon:
         print("test passed\n")
         return True, mu
-    print("test failed for mu_crit <= mu - epsilon with", mu_crit, "!<=", mu-epsilon,"\n")
+
+    print("test failed for mu_crit <= mu - epsilon with", mu_crit, "!<=", mu - epsilon, "\n")
     return False, mu
 
 def test_ampc(dataset="latest", model_name="latest", p=int(1e4)):

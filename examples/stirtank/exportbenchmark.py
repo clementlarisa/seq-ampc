@@ -29,7 +29,7 @@ def np2cpp( arr ):
     
 
 if __name__=='__main__':
-    model_path = Path("models").joinpath('2-50-50-10_mu=1.00_20230106-170148')
+    model_path = Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath('2-50-50-10_mu=1.00_20230106-170148')
     model = keras.models.load_model(model_path)
     
     # model = keras.Sequential(

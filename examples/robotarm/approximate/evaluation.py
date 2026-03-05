@@ -21,7 +21,7 @@ from neuralnetwork import L1, L_mpc_imitate, in_ellipse, compute_learning_rate, 
 from utils import plot_histogram, remove_outliers_based_on_integrator_error
 
 def evaluate_robustness(
-    load_model_path="models/20250503-115751/71.eqx",
+    load_model_path="/share/mihaela-larisa.clement/soeampc-data/models/20250503-115751/71.eqx",
     example='franka',
     Integrator=IntegratorExplicitEulerFixed,
     seed=42,
@@ -205,7 +205,7 @@ def evaluate_robustness(
     print(f"\nDone writing results to {folder_path}")
         
 def evaluate_closed_loop(
-    load_model_path="models/20250503-115751/71.eqx",
+    load_model_path="/share/mihaela-larisa.clement/soeampc-data/models/20250503-115751/71.eqx",
     example='franka',
     Integrator=IntegratorExplicitEulerFixed,
     seed=42,
@@ -694,7 +694,7 @@ def convert_dataset_for_plotting(folder_path, idx):
         print(f"Data saved to {output_path}")
 
 if __name__=="__main__":
-    load_model_path = "models/20250510-140709/399.eqx"
+    load_model_path = "/share/mihaela-larisa.clement/soeampc-data/models/20250510-140709/399.eqx"
     evaluate_robustness(load_model_path=load_model_path)
     evaluate_closed_loop(load_model_path=load_model_path, corrupt_reference=False, noisy=False)
     evaluate_closed_loop(load_model_path=load_model_path, corrupt_reference=True, noisy=True)

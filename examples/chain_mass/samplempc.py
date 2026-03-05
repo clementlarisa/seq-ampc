@@ -411,7 +411,7 @@ def parallel_sample_mpc(
     print("===============================================\n")
 
     os.chdir(fp)
-    datasetpath = str(fp.joinpath(os.path.abspath(fp), 'datasets'))
+    datasetpath = str(fp.joinpath(os.path.abspath(fp), '/share/mihaela-larisa.clement/soeampc-data/archive'))
     print("datasetpath = ", datasetpath)
     processes = []
     parallel_experiments_common_name = prefix+"_"+str(now)+"_"

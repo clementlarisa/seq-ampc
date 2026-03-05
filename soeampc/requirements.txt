@@ -4,3 +4,4 @@ scikit-learn==1.1.1
 tqdm==4.64.0
 scipy==1.9.3
 keras==2.9.0
+tensorflow-gpu==2.9.1

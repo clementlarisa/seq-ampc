@@ -11,7 +11,7 @@ os.chdir(fp)
 
 import fire
 
-from soeampc.safeonline import closed_loop_test_on_dataset, closed_loop_test_on_sampler, closed_loop_test_wtf, closed_loop_test_reason
+from soeampc.safeonline import closed_loop_test_on_dataset, closed_loop_test_on_sampler, closed_loop_test_wtf, closed_loop_test_reason, evaluate_naive_ampc_on_dataset
 from soeampc.sampler import RandomSampler
 
 from plot import plot_quadcopter_cl
@@ -34,8 +34,10 @@ def closed_loop_test_on_sampler_quadcopter_rmpc(model_name="latest", N_samples=i
     sampler = RandomSampler(N_samples, 10, random_seed, x_min, x_max)
     closed_loop_test_on_sampler(model_name, sampler, N_samples)
 
-def closed_loop_test_on_dataset_plot(dataset="latest", model_name="latest", N_samples=1000):
+def closed_loop_test_on_dataset_plot(dataset="latest", model_name="latest", N_samples=int(1e3)):
     results, controllers, mpc = closed_loop_test_on_dataset(dataset, model_name, N_samples)
+
+    # print(f"RESULTS OUT{results}")
 
     x_min = np.array([None, None, None, None,    None, None,             1/mpc.Lx[1,6],  None, 1/mpc.Lx[1,6], None]) 
     x_max = np.array([ 1/mpc.Lx[0,0],  None,  None,  None,  None,  None, 1/mpc.Lx[3,6],  None, 1/mpc.Lx[3,6],  None]) 
@@ -46,7 +48,7 @@ def closed_loop_test_on_dataset_plot(dataset="latest", model_name="latest", N_sa
     
     limits = { "xmin": x_min, "xmax": x_max, "umin": u_min, "umax": u_max }
 
-    plot_controllers = [0,2]
+    plot_controllers = [0,1]
 
     for i in range(len(results)):
         res = results[i]
@@ -55,11 +57,13 @@ def closed_loop_test_on_dataset_plot(dataset="latest", model_name="latest", N_sa
         feasible    = [res[c]["feasible"][:-1] for c in plot_controllers]
         feasible[0] = np.ones(feasible[0].shape)
         labels      = [controllers[c] for c in plot_controllers]
-        path = fp = Path(os.path.dirname(__file__)).joinpath("figures", model_name)
-        plot_quadcopter_cl(mpc, Utraj, Xtraj, feasible, labels=labels, limits=limits, plt_show=False, path=path, filename=f"{i}")
+        base_dir = Path(__file__).resolve().parent / "figures" / Path(model_name).stem
+        base_dir.mkdir(parents=True, exist_ok=True)
+        plot_quadcopter_cl(mpc, Utraj, Xtraj, feasible, labels=labels, limits=limits, plt_show=False, path=base_dir, filename=f"{i}")
 
 if __name__=="__main__":
     fire.Fire({
+        "evaluate_naive_ampc_on_dataset":evaluate_naive_ampc_on_dataset,
         "closed_loop_test_on_dataset": closed_loop_test_on_dataset,
         "closed_loop_test_on_sampler_quadcopter_rmpc": closed_loop_test_on_sampler_quadcopter_rmpc,
         "closed_loop_test_on_dataset_plot": closed_loop_test_on_dataset_plot,

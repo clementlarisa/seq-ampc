@@ -274,4 +274,4 @@ if __name__=="__main__":
         # "load_eqx_export_h5": load_eqx_export_h5
     # })
     
-    load_eqx_export_h5("models/20250510-140709/399.eqx")
+    load_eqx_export_h5("/share/mihaela-larisa.clement/soeampc-data/models/20250510-140709/399.eqx")

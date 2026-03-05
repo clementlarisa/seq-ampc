@@ -342,6 +342,8 @@ class MPCQuadraticCostLxLu(MPC):
                     x = y
                     idx = min( int(t/Ts), np.shape(V)[0]-1)
                     u = np.clip(self.stabilizing_feedback_controller(x, V[idx,:]), self.__umin, self.__umax)
+                    if self.nu == 1:
+                        u = float(u)
                     return tuple(self.f(x, u))
 
             X = odeint(f_pwconst_input, x, t, args=(V, Ts))
@@ -412,7 +414,7 @@ class MPCQuadraticCostLxLu(MPC):
 
     @staticmethod
     def genfromtxt(inpath):
-        # p = Path("datasets").joinpath(file, "parameters")
+        # p = Path("/share/mihaela-larisa.clement/soeampc-data/archive").joinpath(file, "parameters")
         p = inpath
         nx = int(np.genfromtxt( p.joinpath( 'nx.txt'), delimiter=',', dtype="int"))
         nu = int(np.genfromtxt( p.joinpath( 'nu.txt'), delimiter=',', dtype="int"))
@@ -440,6 +442,6 @@ class MPCQuadraticCostLxLu(MPC):
         return mpc
 
 def import_mpc(file="latest", mpcclass=MPCQuadraticCostLxLu):
-    p = Path("datasets").joinpath(file, "parameters")
+    p = Path("/share/mihaela-larisa.clement/soeampc-data/archive").joinpath(file, "parameters")
     mpc = mpcclass.genfromtxt(p)
     return mpc

@@ -405,7 +405,7 @@ def parallel_sample_mpc(instances=16, samplesperinstance=int(1e5), prefix="Clust
     print("===============================================\n")
 
     os.chdir(fp)
-    datasetpath = str(fp.joinpath(os.path.abspath(fp),'datasets'))
+    datasetpath = str(fp.joinpath(os.path.abspath(fp),'/share/mihaela-larisa.clement/soeampc-data/archive'))
     print("datasetpath = ", datasetpath)
     processes = []
     parallel_experiments_common_name = prefix+"_"+str(now)+"_"
