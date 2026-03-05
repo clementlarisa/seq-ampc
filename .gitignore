@@ -173,3 +173,19 @@ examples/*/figures
 *.tar
 
 log.txt
+# IDE
+.idea/
+.vscode/
+
+# HPC / slurm logs
+*.out
+*.err
+
+# Generated figures / artifacts
+*.png
+*.pdf
+
+# (optional) add any project-specific output dirs if they exist
+# logs/
+# runs/
+# outputs/
