@@ -174,7 +174,7 @@ In all commands above, `<DATASET>` is the dataset folder name (under `$SEQAMPC_D
 
 ## Datasets
 
-Precomputed datasets and pretrained models are available on [Zenodo](). For the vehicle datasets, we hold out at evaluation time separate datasets.
+Precomputed datasets and pretrained models are available on [Zenodo](https://zenodo.org/records/19242484). For the vehicle datasets, we hold out at evaluation time separate datasets. The quadcopter dataset is available on the [SOEAMPC Zenodo record](https://zenodo.org/records/7846094).
 
 ## License
 
