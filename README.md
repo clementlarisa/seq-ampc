@@ -71,6 +71,107 @@ Examples from the paper are in the `examples/` folder:
 - [Vehicle kinematic + obstacles](examples/vehicle_obs/) — 4-state kinematic bicycle model with static obstacle avoidance
 - [Vehicle dynamic + obstacles](examples/vehicle_dyn_obs/) — 8-state single-track model with slip and yaw dynamics, static obstacle avoidance
 
+Each example follows the same workflow: **sample MPC solutions**, **train a neural approximation**, and **evaluate in closed loop**.
+
+### Quadcopter
+
+```bash
+cd examples/quadcopter
+
+# 1. Sample MPC solutions (requires acados)
+python samplempc.py sample_mpc
+# or parallel sampling (e.g. 40 instances, 25 samples each):
+python samplempc.py parallel_sample_mpc --instances=40 --samplesperinstance=25
+
+# 2. Merge parallel sampling jobs
+python samplempc.py merge_single_parallel_job
+
+# 3. Train neural approximation (MLP or RNN)
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=MLP
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=RNN \
+    --dense_units="(200, 400, 600)" --rnn_units=256
+
+# 4. Retrain from checkpoint
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=RNN \
+    --dense_units="(200, 400, 600)" --rnn_units=256 \
+    --retrain=True --retrain_model_name=<MODEL_NAME>
+
+# 5. Run statistical test
+python approximatempc.py run_statistical_test --dataset=<DATASET> --neural_type=RNN \
+    --retrain_model_name=<MODEL_NAME>
+
+# 6. Evaluate naive AMPC on dataset
+python safeonlineevaluation.py evaluate_naive_ampc_on_dataset \
+    --dataset=<DATASET> --model_name=<MODEL_NAME>
+
+# 7. Closed-loop test with plots
+python safeonlineevaluation.py closed_loop_test_on_dataset_plot \
+    --dataset=<DATASET> --model_name=<MODEL_NAME>
+
+# 8. Closed-loop test on dataset
+python safeonlineevaluation.py closed_loop_test_on_dataset \
+    --dataset=<DATASET> --model_name=<MODEL_NAME> --N_samples=1000
+
+# 9. Closed-loop test with rejection reason breakdown
+python safeonlineevaluation.py closed_loop_test_reason \
+    --dataset=<DATASET> --model_name=<MODEL_NAME> --N_samples=1000
+```
+
+### Vehicle kinematic + obstacles (vehicle_obs)
+
+```bash
+cd examples/vehicle_obs
+
+# 1. Sample MPC solutions (requires acados)
+python samplempc.py parallel_sample_mpc --instances=40 --samplesperinstance=25
+
+# 2. Merge parallel sampling jobs
+python samplempc.py merge_single_parallel_job
+
+# 3. Train neural approximation (MLP or RNN)
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=MLP
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=RNN \
+    --dense_units="(200, 400, 600)" --rnn_units=256
+
+# 4. Run statistical test
+python approximatempc.py run_statistical_test --dataset=<DATASET> --neural_type=MLP \
+    --retrain_model_name=<MODEL_NAME>
+
+# 5. Closed-loop test on dataset
+python safeonlineevaluation.py closed_loop_test_on_dataset_vehicle_obs \
+    --dataset_dir=<DATASET> --model_name=<MODEL_NAME> --N_samples=1000 --N_sim=100
+```
+
+### Vehicle dynamic + obstacles (vehicle_dyn_obs)
+
+```bash
+cd examples/vehicle_dyn_obs
+
+# 1. Sample MPC solutions (requires acados)
+python samplempc.py parallel_sample_mpc --instances=40 --samplesperinstance=25
+
+# 2. Merge parallel sampling jobs
+python samplempc.py merge_single_parallel_job
+
+# 3. Train neural approximation (MLP or RNN)
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=MLP
+python approximatempc.py find_approximate_mpc --dataset=<DATASET> --neural_type=RNN \
+    --dense_units="(200, 400, 600)" --rnn_units=256
+
+# 4. Run statistical test
+python approximatempc.py run_statistical_test --dataset=<DATASET> --neural_type=MLP \
+    --retrain_model_name=<MODEL_NAME>
+
+# 5. Closed-loop test on dataset
+python safeonlineevaluation.py closed_loop_test_on_dataset_vehicle_obs \
+    --dataset_dir=<DATASET> --model_name=<MODEL_NAME> --N_samples=1000 --N_sim=100
+
+# 6. Inspect dataset interactively
+python eval_dataset.py --dataset=<DATASET>
+```
+
+In all commands above, `<DATASET>` is the dataset folder name (under `$SEQAMPC_DATA_ROOT/archive/`) and `<MODEL_NAME>` is the model folder or `.keras` checkpoint name (under `$SEQAMPC_DATA_ROOT/models/`). Use `--dataset=latest` to automatically pick the most recent dataset.
+
 ## Datasets
 
 Precomputed datasets and pretrained models are available on [Zenodo]().
