@@ -1,10 +1,10 @@
-# Vehicle Example (Kinematic Bicycle + Obstacle Avoidance) — SOEAMPC
+# Vehicle Example (Kinematic Bicycle + Obstacle Avoidance) — Sequential-AMPC
 
-This folder has a example, that uses a **kinematic bicycle model** (ground vehicle) with:
+This folder has an example that uses a **kinematic bicycle model** (ground vehicle) with:
 
 - **Pre-stabilizing LQR feedback**
 - **Nonlinear obstacle avoidance constraints**
-- The same **SOEAMPC dataset generation and approximation workflow**
+- The same **Sequential-AMPC dataset generation and approximation workflow**
 
 ---
 
@@ -146,7 +146,7 @@ for each dataset entry.
 
 ## Requirements
 
-- Python environment for SOEAMPC
+- Python environment for seqampc
 - `acados` + `acados_template`
 - Compatible CasADi version
 
@@ -311,7 +311,7 @@ Open repository root.
 Set interpreter to:
 
 ```
-soeampc/.venv/bin/python
+seqampc/.venv/bin/python
 ```
 
 ### Environment variables

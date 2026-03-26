@@ -6,19 +6,11 @@ from pathlib import Path
 fp = Path(os.path.dirname(__file__))
 os.chdir(fp)
 
-
 import tensorflow.keras as keras
-from jinja2 import Template, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
 import numpy as np
 
-import os
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..','..'))
-from pathlib import Path
-
-fp = Path(os.path.dirname(__file__))
-os.chdir(fp)
-from soeampc.mpcproblem import MPCQuadraticCostLxLu
+from seqampc.mpcproblem import MPCQuadraticCostLxLu
 
 def np2cpp( arr ):
     if arr.ndim == 1:
@@ -29,22 +21,12 @@ def np2cpp( arr ):
     
 
 if __name__=='__main__':
-    model_path = Path("/share/mihaela-larisa.clement/soeampc-data/models").joinpath('10-200-400-600-600-400-200-30_mu=0.12_20230104-232806')
+    from seqampc.config import MODELS_DIR
+    model_path = MODELS_DIR / '10-200-400-600-600-400-200-30_mu=0.12_20230104-232806'
     model = keras.models.load_model(model_path)
-    
-    # model = keras.Sequential(
-    #     [
-    #         keras.layers.Normalization(input_shape=[2,],axis=None),
-    #         keras.layers.Dense(3, activation="tanh"),
-    #         keras.layers.Dense(6, activation="linear"),
-    #         keras.layers.Reshape((2,3))
-    #     ]
-    # )
-    # model.layers[0].adapt(np.array([[1,2],[3,4],[5,6],[7,8]]))
-    
+
     jinja_environment = Environment(loader=FileSystemLoader('benchmark/templates'))
     template_hpp = jinja_environment.get_template('neural_network.hpp.jinja')
-    # template_cpp = jinja_environment.get_template('neural_network.cpp.jinja')
     template_main = jinja_environment.get_template('main.cpp.jinja')
     
     # in normalization calculated as (input-offset)/scale
@@ -64,9 +46,8 @@ if __name__=='__main__':
     else:
         output_size = model.layers[-1].output.shape[1]
         output_horizont = 1
-    
-    # in denormalization, output is calculated as (output * scale + offset)
-    # in this case, network is trained without output normalization
+
+    # No output normalization: identity scale and zero offset
     output_scale =  np2cpp(np.array([1 for i in range(output_size)]))
     output_offset = np2cpp(np.array([0 for i in range(output_size)]))
     
@@ -108,11 +89,7 @@ if __name__=='__main__':
     output = template_hpp.render(template_values)
     with open('benchmark/neural_network.hpp', 'w') as f:
         f.write(output)
-    
-    # output = template_cpp.render(template_values)
-    # with open('embedded_nn_inference/neural_network.cpp', 'w') as f:
-    #     f.write(output)
-    
+
     mpcclass=MPCQuadraticCostLxLu
     p = model_path.joinpath("mpc_parameters")
     mpc = mpcclass.genfromtxt(p)

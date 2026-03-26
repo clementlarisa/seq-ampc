@@ -4,7 +4,7 @@
 """
 eval_dataset.py — inspect + plot saved datasets with plot_vehicle_ol_grid_3x3
 
-Targets the signature used in examples/vehicle_8state_obs/samplempc_obs.py:
+Targets the signature used in examples/vehicle_dyn_obs/samplempc.py:
 
 plot_vehicle_ol_grid_3x3(
     mpc,
@@ -27,7 +27,7 @@ Usage:
   python3 eval_dataset.py --dataset /abs/path/to/datasets/vehicle_8state_obs_...
 
 Assumptions:
-  - run from examples/vehicle_8state_obs/ OR provide --root accordingly
+  - run from examples/vehicle_dyn_obs/ OR provide --root accordingly
   - mpc_parameters/ exists under root
   - dataset folder contains X.txt, U.txt, x0.txt (common), and optionally computetimes.txt
   - optionally: P_obstacles.txt (Nsaved,5) and N_active.txt (Nsaved,)
@@ -85,7 +85,7 @@ def obstacles_list_from_p(p: np.ndarray) -> List[Tuple[float, float]]:
 # ---------------- Dataset loading ----------------
 def _try_load_dataset_arrays(ds_dir: Path, nx: int, nu: int, N: int) -> Dict[str, Any]:
     """
-    Robust loader for common SOEAMPC txt exports.
+    Robust loader for common seqampc txt exports.
 
     Expected (typical):
       x0.txt: (Nsaved, nx)
@@ -193,7 +193,7 @@ def build_mpc_from_parameters(root: Path):
     """
     # imports here after sys.path setup
     from dynamics.f import f
-    from soeampc.mpcproblem import MPCQuadraticCostLxLu
+    from seqampc.mpcproblem import MPCQuadraticCostLxLu
 
     pdir = root / "mpc_parameters"
 

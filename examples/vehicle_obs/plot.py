@@ -1,7 +1,7 @@
 """
 plot.py — vehicle plotting helpers (with obstacle visualization + clearance)
 
-This file is designed for the soeampc vehicle example with obstacle avoidance.
+This file is designed for the seqampc vehicle example with obstacle avoidance.
 
 Supported plots
 ---------------
@@ -345,7 +345,7 @@ def plot_vehicle_ol_grid_2x3(
 
         # XY
         if show_xy:
-            # nur einmal labeln, damit die Legende nicht pro Traj doppelt wird
+            # only label once so the legend doesn't duplicate per trajectory
             traj_label  = "trajectory" if i == 0 else None
             start_label = "start"      if i == 0 else None
             goal_label  = "goal"       if i == 0 else None

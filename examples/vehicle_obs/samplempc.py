@@ -79,16 +79,16 @@ from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosM
 from dynamics.f import f
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from soeampc.datasetutils import (
+from seqampc.datasetutils import (
     import_dataset,
     merge_parallel_jobs,
     get_date_string,
     merge_single_parallel_job,
     print_dataset_statistics,
 )
-from soeampc.mpcproblem import MPCQuadraticCostLxLu
-from soeampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
-from soeampc.sampler import RandomSampler
+from seqampc.mpcproblem import MPCQuadraticCostLxLu
+from seqampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
+from seqampc.sampler import RandomSampler
 
 from plot import plot_feas, plot_vehicle_ol_grid_2x3, plot_vehicle_cl_grid_2x3  # (plot_vehicle_cl optional)
 
@@ -120,7 +120,7 @@ def _stable_hash_seed_from_x0(x0: np.ndarray, base_seed: int) -> int:
     return int(h[:8], 16)
 
 def _stable_hash_seed_from_pos(x0: np.ndarray, base_seed: int) -> int:
-    """Deterministischer Seed nur aus (px,py) + base_seed."""
+    """Deterministic seed from (px, py) + base_seed."""
     x0 = np.asarray(x0, dtype=float).reshape(-1)
     payload = (str(base_seed) + "|" + f"{x0[0]:+.6f},{x0[1]:+.6f}").encode("utf-8")
     h = hashlib.sha256(payload).hexdigest()
@@ -148,12 +148,12 @@ def _sample_two_obstacles_staggered(
     dir_u = d / dn
     perp = np.array([-dir_u[1], dir_u[0]])
 
-    # erstes Hindernis (früher)
+    # first obstacle (earlier along path)
     t1 = rng.uniform(*t1_interval)
     p1 = start + t1 * d
     p1 = p1 + rng.normal(0, lateral_sigma) * perp
 
-    # zweites Hindernis (später)
+    # second obstacle (later along path)
     t2 = rng.uniform(*t2_interval)
     p2 = start + t2 * d
     p2 = p2 + rng.normal(0, lateral_sigma) * perp
@@ -704,7 +704,8 @@ def sample_mpc(
         P_obs[i, :] = p_i
         N_active[i] = n_i
 
-    dataset_root = Path("/share/mihaela-larisa.clement/soeampc-data/archive")
+    from seqampc.config import DATASETS_DIR
+    dataset_root = DATASETS_DIR
     dataset_dir = dataset_root / outfile
     dataset_dir.mkdir(parents=True, exist_ok=True)
     #np.save(dataset_dir.joinpath("P_obstacles.npy"), P_obs)

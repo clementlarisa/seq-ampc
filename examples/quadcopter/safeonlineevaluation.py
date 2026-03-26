@@ -11,22 +11,10 @@ os.chdir(fp)
 
 import fire
 
-from soeampc.safeonline import closed_loop_test_on_dataset, closed_loop_test_on_sampler, closed_loop_test_wtf, closed_loop_test_reason, evaluate_naive_ampc_on_dataset
-from soeampc.sampler import RandomSampler
+from seqampc.safeonline import closed_loop_test_on_dataset, closed_loop_test_on_sampler, closed_loop_test_wtf, closed_loop_test_reason, evaluate_naive_ampc_on_dataset
+from seqampc.sampler import RandomSampler
 
 from plot import plot_quadcopter_cl
-
-# def evaluate_on_sampler(dataset="latest", model="latest", N_samples=int(1e3)):
-#     mpc, X, V, _, _ = mpc_dataset_import(dataset)
-#     sampler = ...
-
-#     model = import_model(modelname=model)
-    
-#     naive_controller = AMPC(mpc, model)
-#     safe_controller = SafeOnlineEvaluationAMPC(mpc, model)
-
-#     controllers = [ naive_controller, safe_controller ]
-#     closed_loop_test(sampler, controllers)
 
 def closed_loop_test_on_sampler_quadcopter_rmpc(model_name="latest", N_samples=int(1e3), random_seed=None):
     x_min = np.array([-2.5, -2.5, -3, -3, -5, -5, -math.pi/180*20, -3*math.pi, -math.pi/180*20, -3*math.pi]) 
@@ -36,8 +24,6 @@ def closed_loop_test_on_sampler_quadcopter_rmpc(model_name="latest", N_samples=i
 
 def closed_loop_test_on_dataset_plot(dataset="latest", model_name="latest", N_samples=int(1e3)):
     results, controllers, mpc = closed_loop_test_on_dataset(dataset, model_name, N_samples)
-
-    # print(f"RESULTS OUT{results}")
 
     x_min = np.array([None, None, None, None,    None, None,             1/mpc.Lx[1,6],  None, 1/mpc.Lx[1,6], None]) 
     x_max = np.array([ 1/mpc.Lx[0,0],  None,  None,  None,  None,  None, 1/mpc.Lx[3,6],  None, 1/mpc.Lx[3,6],  None]) 

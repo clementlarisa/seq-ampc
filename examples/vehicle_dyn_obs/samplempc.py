@@ -53,18 +53,18 @@ from acados_template import (
 
 from dynamics.f import f
 
-# Project imports (SOEAMPC utilities)
+# Project imports (seqampc utilities)
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from soeampc.datasetutils import (
+from seqampc.datasetutils import (
     import_dataset,
     merge_parallel_jobs,
     get_date_string,
     merge_single_parallel_job,
     print_dataset_statistics,
 )
-from soeampc.mpcproblem import MPCQuadraticCostLxLu
-from soeampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
-from soeampc.sampler import RandomSampler
+from seqampc.mpcproblem import MPCQuadraticCostLxLu
+from seqampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
+from seqampc.sampler import RandomSampler
 
 # plots
 from plot import (
@@ -94,7 +94,7 @@ def _stable_hash_seed_from_x0(x0: np.ndarray, base_seed: int) -> int:
     return int(h[:8], 16)
 
 def _stable_hash_seed_from_pos(x0: np.ndarray, base_seed: int) -> int:
-    """Deterministischer Seed nur aus (px,py) + base_seed."""
+    """Deterministic seed from (px, py) + base_seed."""
     x0 = np.asarray(x0, dtype=float).reshape(-1)
     payload = (str(base_seed) + "|" + f"{x0[0]:+.6f},{x0[1]:+.6f}").encode("utf-8")
     h = hashlib.sha256(payload).hexdigest()
@@ -680,7 +680,8 @@ def sample_mpc(
         P_obs[i, :] = p_i
         N_active[i] = n_i
 
-    dataset_root = Path("/share/mihaela-larisa.clement/soeampc-data/archive")
+    from seqampc.config import DATASETS_DIR
+    dataset_root = DATASETS_DIR
     dataset_dir = dataset_root / outfile
     dataset_dir.mkdir(parents=True, exist_ok=True)
     np.savetxt(

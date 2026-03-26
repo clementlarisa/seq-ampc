@@ -1,0 +1,9 @@
+tensorflow>=2.20
+keras>=3.12
+numpy>=2.4
+scipy>=1.17
+scikit-learn>=1.7
+matplotlib>=3.10
+tqdm>=4.67
+fire>=0.7
+h5py>=3.15

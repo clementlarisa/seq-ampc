@@ -17,17 +17,17 @@ np.core.arrayprint._line_width = 200
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from soeampc.datasetutils import import_dataset, merge_parallel_jobs, get_date_string, merge_single_parallel_job, print_dataset_statistics
-from soeampc.mpcproblem import MPCQuadraticCostLxLu
-from soeampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
-from soeampc.sampler import RandomSampler
+from seqampc.datasetutils import import_dataset, merge_parallel_jobs, get_date_string, merge_single_parallel_job, print_dataset_statistics
+from seqampc.mpcproblem import MPCQuadraticCostLxLu
+from seqampc.samplempc import sample_dataset_from_mpc, computetime_test_fwd_sim
+from seqampc.sampler import RandomSampler
 
 fp = Path(os.path.dirname(__file__))
 os.chdir(fp)
 
 
 def export_quadcopter_ode_model():
-    """export acados model for chain mass
+    """export acados model for quadcopter
 
     Returns:
         acados model
@@ -51,7 +51,6 @@ def export_quadcopter_ode_model():
     s = SX.sym('s')
     sdot = SX.sym('sdot')
 
-    # print(x.shape)
     v = SX.sym('u', nu, 1)
     u = Kdelta @ x + v
 
@@ -62,12 +61,9 @@ def export_quadcopter_ode_model():
     model = AcadosModel()
 
     model.f_impl_expr = f_impl
-    # model.f_expl_expr = f_expl
     model.x = vertcat(x, s)
     model.xdot = vertcat(xdot, sdot)
     model.u = v
-
-    # model.z = z
     model.p = []
     model.name = model_name
 
@@ -96,12 +92,9 @@ def export_quadcopter_sim_model():
     model = AcadosModel()
 
     model.f_impl_expr = f_impl
-    # model.f_expl_expr = f_expl
     model.x = x
     model.xdot = xdot
     model.u = v
-
-    # model.z = z
     model.p = []
     model.name = model_name
 
@@ -288,7 +281,6 @@ def sample_mpc(
 
     ocp.constraints.x0 = np.zeros(nx_)
 
-    # mpc = MPCQuadraticCostLxLu(f, nx, nu, N, Tf, Q, R, P, alpha_f, K, xmin, xmax, umin, umax, Vx, Vu)
     mpc = MPCQuadraticCostLxLu(f, nx, nu, N, Tf, Q, R, P, alpha_f,
                                K, Lx, Lu, Kdelta, alpha_reduced=alpha, S=Sinit, Ls=Ls)
     mpc.name = model.name
@@ -301,9 +293,7 @@ def sample_mpc(
     ocp.solver_options.nlp_solver_type = 'SQP'  # SQP_RTI, SQP
     ocp.solver_options.hpipm_mode = 'ROBUST'
 
-    # ocp.solver_options.qp_solver_iter_max=18
     ocp.solver_options.qp_tol = 1e-8
-    # ocp.solver_options.levenberg_marquardt = 100.0
     ocp.solver_options.levenberg_marquardt = 20.0
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING'
     ocp.solver_options.globalization_use_SOC = 1
@@ -312,42 +302,24 @@ def sample_mpc(
     ocp.solver_options.alpha_min = 0.0001
     ocp.solver_options.regularize_method = 'MIRROR'
 
-    # ocp.solver_options.eps_sufficient_descent = 1e-2
-    # ocp.solver_options.regularize_method = 'PROJECT'
-
-    # set prediction horizon
-
     ocp.solver_options.tf = Tf
     ocp.solver_options.print_level = 0
     ocp.solver_options.nlp_solver_max_iter = nlpiter
-    # ocp.solver_options.tol = 1e-9
-    # ocp.solver_options.sim_method_num_stages = 6
-    # ocp.solver_options.sim_method_newton_iter = 10
-    # ocp.solver_options.sim_method_num_steps = 100
 
     if generate:
         acados_ocp_solver = AcadosOcpSolver(
             ocp, json_file='acados_ocp_' + model.name + '.json')
 
-    # for i in range(N):
-    #     print(acados_ocp_solver.get(i,'x'))
-    #     print(acados_ocp_solver.get(i,'u'))
-
     xmin = np.array([-2.5,   -2.5,  -3,  -3, -3, -5, -math.pi /
                     180*20, -3*math.pi, -math.pi/180*20, -3*math.pi])
-    # xmin = np.array([-2, -2, -2, 0,0,0,0,0,0,0])
     xmax = np.array([0.145,  2.5,  2.5,  3,  3,  5,  math.pi /
                     180*20,  3*math.pi,  math.pi/180*20,  3*math.pi])
-    # xmax = np.array([ 1,  2,  2,  0,0,0,0,0,0,0])
 
     umax = np.array([1/Lu[nxconstr+i, i] for i in range(nu)])
     umin = np.array([1/Lu[nxconstr+nu+i, i] for i in range(nu)])
     print("\numin =\n ", umin)
     print("\numax =\n ", umax)
 
-    # umin = np.array([ -35*math.pi/180, -35*math.pi/180, -9.81/0.91       ])
-    # umax = np.array([  35*math.pi/180,  35*math.pi/180,  18-9.81/0.91 ])
-    # sampler = RandomSampler(int(100),mpc.nx, 42)
     sampler = RandomSampler(numberofsamples, mpc.nx, randomseed, xmin, xmax)
 
     def run(x0, verbose=False):
@@ -362,11 +334,6 @@ def sample_mpc(
         Xinit = np.linspace(x0, np.zeros(nx), N+1)
         Uinit = np.zeros((N, nu))
 
-        # Xinit = np.zeros((N+1,nx))
-        # Xinit[0] = x0
-        # Xinit = np.linspace(x0,np.zeros(nx), N+1)
-        # Uinit = np.array([K@x for x in Xinit])
-        # Kinit = K
         for i in range(N):
             Uinit[i] = Kinit @ Xinit[i]
             Uinit[i] = np.clip(Uinit[i], umin-Kdelta @
@@ -385,19 +352,6 @@ def sample_mpc(
 
         status = acados_ocp_solver.solve()
 
-        # if status == 1 or status == 2 or status == 4:
-        # status = acados_ocp_solver.solve()
-
-        # if status != 0 or status != 2:
-        #     print('acados acados_ocp_solver returned status {}. Exiting.'.format(status))
-        #     print(x0)
-        #     acados_ocp_solver.print_statistics()
-
-        # if status == 0 or status == 2:
-        #     print('acados acados_ocp_solver returned status {}. Exiting.'.format(status))
-        #     print(x0)
-        #     acados_ocp_solver.print_statistics()
-
         X = np.ndarray((N+1, nx))
         S = np.ndarray(N+1)
         U = np.ndarray((N, nu))
@@ -407,49 +361,11 @@ def sample_mpc(
             U[i, :] = acados_ocp_solver.get(i, "u")
         X[N, :] = acados_ocp_solver.get(N, "x")[:-1]
         S[N] = acados_ocp_solver.get(N, "x")[-1]
-        # print(S)
         computetime = float(acados_ocp_solver.get_stats('time_tot'))
-        # print(status)
-
-        # Always plot initialization condition
-        # if status == 0 or status == 2:
-        #     print("\nx0 =\n",x0)
-        #     print("\nXinit =\n ",Xinit)
-        #     print("\nUinit =\n ",Uinit)
-        #     print("\nfeasible = ",mpc.feasible(Xinit, Uinit, verbose=True))
-        #     print(status)
-        #     plot_quadcopter_ol(mpc,[Uinit, U], [Xinit, X], labels=['INIT', 'ACADOS'])
-
-        # Plot initialization, whenever it is feasible but acados reports infeasible
-        # if not (status == 0 or status == 2) and mpc.feasible(Xinit, Uinit):
-        #     print("\nx0 =\n",x0)
-        #     print("\nXinit =\n ",Xinit)
-        #     print("\nUinit =\n ",Uinit)
-        #     print("\nfeasible = ",mpc.feasible(Xinit, Uinit, verbose=True))
-        #     acados_ocp_solver.print_statistics()
-        #     print(status)
-        #     plot_quadcopter_ol(mpc,[Uinit, U], [Xinit, X], labels=['INIT', 'ACADOS'])
 
         number_iterations = float(acados_ocp_solver.get_stats('sqp_iter'))
         return X, U, status, computetime, number_iterations
 
-    # print("\n\nrun([0, 0, -1, 0,0,0, 0,0,0,0 ])")
-    # print(run([0, 0, -1, 0,0,0, 0,0,0,0 ]))
-
-    # print("\n\nrun([0, 0, -5, 0,0,0, 0,0,0,0 ])")
-    # print(run([0, 0, -5, 0,0,0, 0,0,0,0 ]))
-
-    # print("\n\nrun([0, 0, -8, 0,0,0, 0,0,0,0 ])")
-    # X,U, status, _ = run([0, 0, -15, 0,0,0, 0,0,0,0 ])
-    # X,U, status, _ = run([0, -3.5, -15, 0,0,0, 0,0,0,0 ])
-    # X,U, status, _ = run([-2, -2, -15, 0,0,0, 0,0,0,0 ])
-    # X,U, status, _ = run([-5, -5, -10, 0,0,0, 0,0,0,0 ])
-    # print("ACADOS status = ", status)
-    # mpc.feasible(X,U, verbose=True)
-
-    # print(run([0, 0, -1, 0,0,0, 0,0,0,0 ]))
-    # print(run([1, 1, 0, 0,0,0, 0,0,0,0 ]))
-    # print(run([1, 1, 0, 0,0,0, 0,0,0,0 ]))
     _, _, _, _, outfile = sample_dataset_from_mpc(
         mpc, run, sampler, experimentname, verbose=verbose)
     print("Outfile", outfile)
@@ -493,7 +409,8 @@ def parallel_sample_mpc(
     print("===============================================\n")
 
     os.chdir(fp)
-    datasetpath = str(fp.joinpath(os.path.abspath(fp), '/share/mihaela-larisa.clement/soeampc-data/archive'))
+    from seqampc.config import DATASETS_DIR
+    datasetpath = str(DATASETS_DIR)
     print("datasetpath = ", datasetpath)
     processes = []
     parallel_experiments_common_name = prefix+"_"+str(now)+"_"

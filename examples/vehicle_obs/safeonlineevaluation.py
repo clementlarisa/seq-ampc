@@ -1,7 +1,7 @@
-# safeonlineevaluation.py — vehicle_dyn_obs
-# - Plottet NUR "gute" Samples (terminal bevorzugt), ohne f_cont/RK4 (nutzt controller(xk)->x_next).
-# - Speichert Plots immer unter eindeutigem Namen (timestamp + counter + sample idx + controller).
-# - Optional: "Interpolieren" (Upsampling) der Trajektorien für glattere Plots (linear).
+# safeonlineevaluation.py — vehicle_obs
+# - Plots only 'good' samples (preferring terminal), without f_cont/RK4 (uses controller(xk)->x_next).
+# - Saves plots under a unique name (timestamp + counter + sample idx + controller).
+# - Optional: interpolation (upsampling) of trajectories for smoother plots (linear).
 
 import os
 import sys
@@ -20,22 +20,23 @@ from matplotlib.patches import Circle
 # -----------------------------------------------------------------------------
 
 FP = Path(__file__).resolve().parent
-DATASETS_ROOT = "/share/mihaela-larisa.clement/soeampc-data/archive"
+from seqampc.config import DATASETS_DIR, MODELS_DIR
+DATASETS_ROOT = str(DATASETS_DIR)
 
 os.chdir(FP)
 sys.path.append(str(FP.parent.parent))
 
 # -----------------------------------------------------------------------------
-# SOEAMPC imports
+# seqampc imports
 # -----------------------------------------------------------------------------
 
-from soeampc.safeonline import (
+from seqampc.safeonline import (
     AMPC,
     SafeOnlineEvaluationAMPC,
-    SafeOnlineEvaluationAMPCGroundTruethInit,
+    SafeOnlineEvaluationAMPCGroundTruthInit,
 )
-from soeampc.datasetutils import mpc_dataset_import
-from soeampc.trainampc import import_model
+from seqampc.datasetutils import mpc_dataset_import
+from seqampc.trainampc import import_model
 
 
 # =============================================================================
@@ -44,8 +45,8 @@ from soeampc.trainampc import import_model
 
 def _get_u_limits_from_mpc(mpc):
     """
-    Best-effort: versucht umin/umax aus dem MPC zu holen.
-    Ergänze hier deine Attribute, falls dein MPC anders heißt.
+    Best-effort: tries to extract umin/umax from the MPC.
+    Add your attributes here if your MPC uses different names.
     """
     if hasattr(mpc, "umin") and hasattr(mpc, "umax"):
         return np.asarray(mpc.umin).reshape(-1), np.asarray(mpc.umax).reshape(-1)
@@ -56,9 +57,9 @@ def _get_u_limits_from_mpc(mpc):
 
 def _upsample_time_series(Y: np.ndarray, up: int) -> np.ndarray:
     """
-    Linear upsampling entlang der Zeitachse.
+    Linear upsampling along the time axis.
     - Y: (T, d)
-    - up: 1 => unverändert; 5 => 5x dichter
+    - up: 1 => unchanged; 5 => 5x denser
     """
     if up is None or int(up) <= 1:
         return Y
@@ -146,7 +147,7 @@ def plot_vehicle_obs_cl(
     ax_u1.set_xlabel("k")
     ax_u1.grid(True)
 
-    # constraints (falls mpc gegeben)
+    # constraints (if mpc is provided)
     if mpc is not None:
         umin, umax = _get_u_limits_from_mpc(mpc)
         if umin is not None and umax is not None and len(umin) >= 2 and len(umax) >= 2:
@@ -248,7 +249,7 @@ def _timestamp_tag():
 
 def _unique_plot_path(out_dir: Path, stem: str, ext: str = ".png") -> Path:
     """
-    Findet einen freien Dateinamen: stem_000.png, stem_001.png, ...
+    Finds a free filename: stem_000.png, stem_001.png, ...
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     for k in range(10_000):
@@ -278,7 +279,7 @@ def closed_loop_experiment_vehicle_obs(x0, p_obs, controller, Nsim=500):
     for k in range(Nsim - 1):
         xk = X_cl[k]
 
-        # IMPORTANT: nutzt interne Propagation (funktioniert bei dir)
+        # Uses the controller's internal propagation
         v_dec, x_next = controller(xk)
         if hasattr(controller, "feasible_debug"):
             debug_list.append(controller.feasible_debug.copy())
@@ -298,19 +299,18 @@ def closed_loop_experiment_vehicle_obs(x0, p_obs, controller, Nsim=500):
 
         if not (feasible_si and feasible_obs):
             status = "infeasible_cl"
-            return status, X_cl[:k + 2], U_cl[:k + 1], V_cl[:k + 1], feasible_ampc[:k + 1], min_clear, debug_list  # <--- add
+            return status, X_cl[:k + 2], U_cl[:k + 1], V_cl[:k + 1], feasible_ampc[:k + 1], min_clear, debug_list
 
         if controller.mpc.in_terminal_constraints(x_next, robust=False):
             status = "terminal_set_reached"
-            return status, X_cl[:k + 2], U_cl[:k + 1], V_cl[:k + 1], feasible_ampc[:k + 1], min_clear, debug_list  # <--- add
+            return status, X_cl[:k + 2], U_cl[:k + 1], V_cl[:k + 1], feasible_ampc[:k + 1], min_clear, debug_list
 
     min_clear = _obstacle_violation_xy(X_cl, p_obs)
-    return "timeout", X_cl, U_cl, V_cl, feasible_ampc, min_clear, debug_list  # <--- add
+    return "timeout", X_cl, U_cl, V_cl, feasible_ampc, min_clear, debug_list
 
 # =============================================================================
 # Main Evaluation
 # =============================================================================
-import numpy as np
 
 def print_reason_metrics_from_feasible_debug(results):
     """
@@ -364,9 +364,9 @@ def closed_loop_test_on_dataset_vehicle_obs(
     plot_controller: str = "safe",     # "naive"|"safe"|"safe init"
     prefer_terminal: bool = True,
     xy_lim: float = 15.0,
-    interp_factor: int = 1,            # <-- neu: z.B. 5 für glattere Kurven
-    unique_names: bool = True,         # <-- neu: speichert immer unter neuem Namen
-    include_safe_init: bool = False,   # <-- optional
+    interp_factor: int = 1,            # e.g. 5 for smoother curves
+    unique_names: bool = True,         # always saves under a new name
+    include_safe_init: bool = False,
 ):
     dataset_dir = _resolve_dataset_dir(dataset_dir)
     out_dir = Path(out_dir)
@@ -381,17 +381,9 @@ def closed_loop_test_on_dataset_vehicle_obs(
 
     P_obs, _ = _load_obstacle_params(dataset_dir)
 
-    # Ns = min(int(N_samples), X0.shape[0], P_obs.shape[0])
-    # X0 = X0[:Ns]
-
     from sklearn.model_selection import train_test_split
-    import numpy as np
 
-    # After:
-    # mpc, X0, V_init, _, _ = mpc_dataset_import(...)
-    # P_obs, _ = _load_obstacle_params(...)
-
-    # A) reproduce sklearn test split (same as training/statistical_test)
+    # Reproduce sklearn test split (same as training/statistical_test)
     N = X0.shape[0]
     idx = np.arange(N)
 
@@ -402,9 +394,8 @@ def closed_loop_test_on_dataset_vehicle_obs(
         shuffle=True
     )
 
-    # B) reproduce statistical_test subsampling (same seed and sampling rule)
-    # Use the same p you pass to statistical_test (recommended), otherwise use N_samples
-    p = min(int(N_samples), idx_test.shape[0])   # or: min(int(N_samples), idx_test.shape[0])
+    # Reproduce statistical_test subsampling (same seed and sampling rule)
+    p = min(int(N_samples), idx_test.shape[0])
 
     rng = np.random.default_rng(seed=42)
     sub = rng.choice(idx_test.shape[0], size=p, replace=False)
@@ -424,7 +415,7 @@ def closed_loop_test_on_dataset_vehicle_obs(
 
     naive = AMPC(mpc, model)
     safe = SafeOnlineEvaluationAMPC(mpc, model)
-    safe_init = SafeOnlineEvaluationAMPCGroundTruethInit(mpc, model)
+    safe_init = SafeOnlineEvaluationAMPCGroundTruthInit(mpc, model)
 
     if include_safe_init:
         controllers = [naive, safe, safe_init]
@@ -467,12 +458,12 @@ def closed_loop_test_on_dataset_vehicle_obs(
                     "feasible_init": bool(c.feasible),
                     "p_obs": np.copy(p_obs),
                     "min_clearance": float(min_clear),
-                    "feasible_debug_list": dbg_list,   # <--- add
+                    "feasible_debug_list": dbg_list,
                 }
             )
         all_results.append(res_i)
 
-        # bookkeeping: "good" nach gewünschtem Controller
+        # bookkeeping: "good" samples for the selected controller
         st = res_i[plot_j]["status"]
         mc = res_i[plot_j]["min_clearance"]
         if st == "terminal_set_reached":
@@ -481,7 +472,7 @@ def closed_loop_test_on_dataset_vehicle_obs(
             good_other.append((i, mc))
 
     # ---------------------------------------------------------
-    # Plot: NUR erfolgreiche Samples
+    # Plot: only successful samples
     # ---------------------------------------------------------
     if do_plot and n_good_plots > 0:
         good_terminal.sort(key=lambda t: t[1], reverse=True)
@@ -548,7 +539,7 @@ def closed_loop_test_on_dataset_vehicle_obs(
 
     _summarize(all_results, names)
     
-    return None  # damit fire nichts riesiges ausdruckt
+    return None  # prevent fire from printing large return values
 
 
 # =============================================================================

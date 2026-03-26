@@ -1,41 +1,80 @@
-# Updates
-- *2025-05-15*: Added C++ Eigen benchmark for real-time performance to [stirtank](./examples/stirtank/benchmark) and [quadcopter](./examples/quadcopter/benchmark)
-- *2025-05-15*: Added additional numerical example on [robot arm control](./examples/robotarm/), which is standalone from the rest of the repo.
+# Sequential-AMPC: Safe Learning-Based Nonlinear Model Predictive Control through Recurrent Neural Network Modeling
 
-# Approximate non-linear model predictive control with safety-augmented neural networks
-Implementation of safety-augmentation and three numerical benchmark examples (stirtank reactor, quadcopter, and chain mass system). The paper describing the theory can be found [on arXiv](https://arxiv.org/abs/2304.09575).
+This repository contains the implementation for the paper:
 
-## Requirements
-You need `acados` to run parts of this code.
-Please follow [the official acados installation instructions](https://docs.acados.org/installation/index.html). This code was tested with `acados v0.1.9`.
+> **Towards Safe Learning-Based Non-Linear Model Predictive Control through Recurrent Neural Network Modeling**
+> Mihaela-Larisa Clement, Monika Farsang, Agnes Poks, Johannes Edelmann, Manfred Plochl, Radu Grosu, Ezio Bartocci
+> arXiv:2603.24503 [cs.LG], 2026
+> https://arxiv.org/abs/2603.24503
 
-You can install other Python dependencies via pip:
+We propose **Sequential-AMPC**, a sequential neural policy that generates MPC candidate control sequences by sharing parameters across the prediction horizon. For deployment, the policy is wrapped in a safety-augmented online evaluation and fallback mechanism, yielding **Safe Sequential-AMPC**.
+
+## Attribution
+
+This codebase builds on the [SOEAMPC](https://arxiv.org/abs/2304.09575) framework. If you use this code, please cite both papers:
+
+```bibtex
+@article{clement2026seqampc,
+  title={Towards Safe Learning-Based Non-Linear Model Predictive Control through Recurrent Neural Network Modeling},
+  author={Clement, Mihaela-Larisa and Farsang, M{\'o}nika and Poks, Agnes and Edelmann, Johannes and Pl{\"o}chl, Manfred and Grosu, Radu and Bartocci, Ezio},
+  journal={arXiv preprint arXiv:2603.24503},
+  year={2026}
+}
+
+@article{Hose_2025,
+   title={Approximate Nonlinear Model Predictive Control With Safety-Augmented Neural Networks},
+   volume={33},
+   ISSN={2374-0159},
+   url={http://dx.doi.org/10.1109/TCST.2025.3590268},
+   DOI={10.1109/tcst.2025.3590268},
+   number={6},
+   journal={IEEE Transactions on Control Systems Technology},
+   publisher={Institute of Electrical and Electronics Engineers (IEEE)},
+   author={Hose, Henrik and Köhler, Johannes and Zeilinger, Melanie N. and Trimpe, Sebastian},
+   year={2025},
+   month=nov, pages={2490–2497} }
+
+```
+
+## Installation
+
+### 1. Conda environment (recommended)
+
 ```bash
-pip3 install -r examples/requirements.txt
-pip3 install -r soeampc/requirements.txt
+conda env create -f environment.yml
+conda activate seqampc
+```
+
+### 2. acados
+
+[acados](https://docs.acados.org/installation/index.html) is required for MPC sampling. After building acados, add the Python interface to your path:
+
+```bash
+export ACADOS_INSTALL_DIR=/path/to/acados
+export PYTHONPATH=$ACADOS_INSTALL_DIR/interfaces/acados_template:$PYTHONPATH
+export LD_LIBRARY_PATH=$ACADOS_INSTALL_DIR/lib:$LD_LIBRARY_PATH
+```
+
+### 3. Data directory (optional)
+
+By default, datasets and models are read from `./data/`. To use a different location, set:
+
+```bash
+export SEQAMPC_DATA_ROOT=/path/to/data
 ```
 
 ## Numerical Examples
-You find the numerical examples from the paper in the `examples` folder. Each example has it's own `README.md` file with instructions how to run them:
-- [Two state stir tank reactor](examples/stirtank/README.md)
-- [Ten state quadcopter](examples/quadcopter/README.md)
-- [Chain mass system](examples/chain_mass/README.md)
 
-## Downloading precomputed datasets and pretrained NNs
-You can download the training and testing datasets used in the paper together with the pretrained model from [Zenodo](https://doi.org/10.5281/zenodo.7846094).
+Examples from the paper are in the `examples/` folder:
 
-Extract the datasets into the `examples/{system}/datasets/` folder, e.g., for the quadcopter example, you should get an `examples/quadcopter/datasets/quadcopter_N_9600000` folder.
+- [Quadcopter](examples/quadcopter/) — 10-state quadrotor stabilization (no obstacles)
+- [Vehicle kinematic + obstacles](examples/vehicle_obs/) — 4-state kinematic bicycle model with static obstacle avoidance
+- [Vehicle dynamic + obstacles](examples/vehicle_dyn_obs/) — 8-state single-track model with slip and yaw dynamics, static obstacle avoidance
 
-Extract the pretrained neural networks into the `examples/{system}/models/` folder, e.g., for the quadcopter example, you should get an `examples/quadcopter/models/10-200-400-600-600-400-200-30_mu=0.12_20230104-232806` folder.
+## Datasets
 
-## Running inside Docker
-The Dockerfile in this repository allows you to run the code without installing acados or other Python dependencies natively.
-To use the Container, you first have build it by running:
-```
-docker build -t soeampc .
-```
-Next, run the container and mount this repository:
-```
-docker run -it --name soeampc -v $(pwd):/soeampc soeampc bash
-```
-You can now run all the example commands inside the container.
+Precomputed datasets and pretrained models are available on [Zenodo]().
+
+## License
+
+See [LICENSE](LICENSE) for details.

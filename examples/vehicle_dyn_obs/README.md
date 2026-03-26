@@ -1,9 +1,9 @@
-# Vehicle Example (7-State Single-Track) + Obstacles --- SOEAMPC
+# Vehicle Example (7-State Single-Track) + Obstacles --- Sequential-AMPC
 
 This example uses a **7-state single-track vehicle model** with a
 **pre-stabilizing feedback** and **hard obstacle avoidance
 constraints**.\
-It follows the SOEAMPC workflow:
+It follows the Sequential-AMPC workflow:
 
 1.  Generate MPC solutions
 2.  Export dataset
@@ -77,7 +77,7 @@ After dataset generation, obstacle parameters are written to:
 
 ## Requirements
 
--   Python environment for SOEAMPC
+-   Python environment for seqampc
 -   acados + acados_template
 -   CasADi compatible with your acados build
 
