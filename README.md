@@ -174,7 +174,7 @@ In all commands above, `<DATASET>` is the dataset folder name (under `$SEQAMPC_D
 
 ## Datasets
 
-Precomputed datasets and pretrained models are available on [Zenodo]().
+Precomputed datasets and pretrained models are available on [Zenodo](). For the vehicle datasets, we hold out at evaluation time separate datasets.
 
 ## License
 
